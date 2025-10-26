@@ -2,7 +2,15 @@ from transformers import pipeline
 import pandas as pd
 
 def analyze_sentiment(df):
-    sentiment_pipeline = pipeline("sentiment-analysis", model="ProsusAI/finbert")
+    from transformers import pipeline
+
+def analyze_sentiment(df):
+    sentiment_pipeline = pipeline(
+        "sentiment-analysis", 
+        model="ProsusAI/finbert",
+        device=-1  # Ensures CPU usage, avoids meta tensor issue
+    )
+
     sentiments = []
     
     for text in df['title']:
