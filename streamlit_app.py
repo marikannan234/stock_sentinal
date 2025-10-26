@@ -18,8 +18,13 @@ if "sentiment_summary" not in st.session_state:
 
 # --- Input Fields ---
 st.sidebar.header("Configuration")
-user_api_key = st.sidebar.text_input("Enter your NewsAPI Key", type="password")
-ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, TSLA)")
+user_api_key = 151eb78228084f2fb633e9aacb91ba96
+tickers = st.multiselect(
+    "Select Companies to Analyze:",
+    ["AAPL", "TSLA", "MSFT", "AMZN", "GOOGL", "NVDA", "META", "NFLX"],
+    default=["AAPL", "TSLA"]
+)
+
 
 # --- Data Fetching Section ---
 if ticker and user_api_key:
