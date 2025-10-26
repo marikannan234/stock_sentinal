@@ -7,10 +7,6 @@ import os
 st.set_page_config(page_title="StockSentinel", layout="wide")
 st.title("📈 StockSentinel: AI-Powered Market Sentiment Analyzer")
 
-# --- Secure API Key Setup ---
-# OPTION 1: If deploying on Streamlit Cloud — use secrets management.
-# Add this key under "Secrets" in app settings as: NEWS_API_KEY = "your_key_here"
-# api_key = st.secrets["NEWS_API_KEY"]
 
 # OPTION 2: For local development — hardcode (not recommended for public repos).
 api_key = "151eb78228084f2fb633e9aacb91ba96"  # replace with your actual key
@@ -55,6 +51,15 @@ for ticker in tickers:
                     title=f"{ticker} - News Sentiment"
                 )
                 st.plotly_chart(sentiment_fig, use_container_width=True)
+#plotting loop
+for ticker in tickers:
+    col_name = f"Close_{ticker}"
+    if col_name in stock_data.columns:
+        fig = px.line(stock_data, x="Date", y=col_name, title=f"{ticker} Closing Prices")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning(f"No data found for {ticker}.")
+
 
             # Display News Data
             st.dataframe(analyzed_data[["title", "source", "publishedAt", "sentiment"]])
