@@ -3,7 +3,7 @@ from newsapi import NewsApiClient
 import pandas as pd
 
 def fetch_stock_data(tickers):
-    data = yf.download(tickers, period="30d", interval="1d", group_by='ticker')
+    data = yf.download(tickers, period="30d", interval="1d", group_by="ticker")
     data.reset_index(inplace=True)
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = [f"{a}_{b}" if b else a for a, b in data.columns]
