@@ -113,16 +113,12 @@ if tickers:
             # --- PRICE CHART ---
             if "Date" in stock_data.columns:
                 close_col = f"Close_{ticker}" if f"Close_{ticker}" in stock_data.columns else "Close"
-                if close_col in stock_data.columns:
-                    fig = px.line(
-                        stock_data,
-                        x="Date",
-                        y=close_col,
-                        title=f"{ticker} - Stock Prices (Last 30 Days)"
-                    )
+                if "Date" in stock_data.columns and close_col in stock_data.columns:
+                    fig = px.line(stock_data, x="Date", y=close_col, title=f"{ticker} – Closing Prices (Last 30 Days)")
                     st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.warning(f"'{close_col}' column missing for {ticker}.")
+                    st.warning(f"‘Close’ column not found for {ticker}.")
+
             else:
                 st.warning("Stock data missing 'Date' column.")
 
