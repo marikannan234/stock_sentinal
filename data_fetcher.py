@@ -1,6 +1,7 @@
 import yfinance as yf
 from newsapi import NewsApiClient
 import pandas as pd
+import streamlit as st
 
 @st.cache_data(ttl=1800)
 def fetch_stock_data(tickers):
