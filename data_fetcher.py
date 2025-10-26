@@ -3,27 +3,34 @@ from newsapi import NewsApiClient
 import pandas as pd
 import streamlit as st
 
+
 @st.cache_data(ttl=1800)
 def fetch_stock_data(tickers):
-    # Allow single ticker or list
+    """
+    Fetch stock price data for single or multiple companies and flatten columns
+    to make sure 'Date' and 'Close' are always accessible.
+    """
+    # Allow single or list input
     if isinstance(tickers, str):
         tickers = [tickers]
 
-    # Download data with group_by='ticker' for multi-company support
-    data = yf.download(tickers, period="1mo", interval="1d", group_by="ticker", auto_adjust=True)
-
-    # Reset index so Date becomes a column
+    # Download with multi-level support
+    data = yf.download(tickers, period="30d", interval="1d", group_by='ticker', auto_adjust=True)
     data.reset_index(inplace=True)
 
-    # Flatten MultiIndex columns (e.g., ('Close','AAPL') → 'Close_AAPL')
+    # --- Fix for MultiIndex (latest yfinance update) ---
     if isinstance(data.columns, pd.MultiIndex):
-        data.columns = [
-            f"{col[0]}_{col[1]}" if col[1] else col[0] for col in data.columns
-        ]
+        # If single ticker, extract its sub-data directly
+        if len(tickers) == 1:
+            data = data.xs(key=tickers[0], axis=1, level=1)
+            data.reset_index(inplace=True)
+        else:
+            # Flatten multi-level columns (e.g. ('Close','TSLA') → 'Close_TSLA')
+            data.columns = [f"{a}_{b}" if b else a for a, b in data.columns]
 
-    # Rename standalone Date column safely
-    if "Date_" in data.columns:
-        data.rename(columns={"Date_": "Date"}, inplace=True)
+    # Clean indexing just in case
+    data = data.loc[:, ~data.columns.duplicated()]
+    data = data.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
 
     return data
 
