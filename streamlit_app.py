@@ -51,14 +51,7 @@ for ticker in tickers:
                     title=f"{ticker} - News Sentiment"
                 )
                 st.plotly_chart(sentiment_fig, use_container_width=True)
-#plotting loop
-for ticker in tickers:
-    col_name = f"Close_{ticker}"
-    if col_name in stock_data.columns:
-        fig = px.line(stock_data, x="Date", y=col_name, title=f"{ticker} Closing Prices")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning(f"No data found for {ticker}.")
+
 
 
             # Display News Data
