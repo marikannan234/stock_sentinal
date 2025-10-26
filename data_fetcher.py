@@ -7,32 +7,42 @@ import streamlit as st
 @st.cache_data(ttl=1800)
 def fetch_stock_data(tickers):
     """
-    Fetch stock price data for single or multiple companies and flatten columns
-    to make sure 'Date' and 'Close' are always accessible.
+    Fetch stock price data for one or multiple tickers from Yahoo Finance.
+    Handles yfinance's new MultiIndex column format introduced in 0.2.51+.
+    Always returns a DataFrame with a 'Date' column and flattened names.
     """
-    # Allow single or list input
+    import yfinance as yf
+    import pandas as pd
+
+    # Accept both string and list input
     if isinstance(tickers, str):
         tickers = [tickers]
 
-    # Download with multi-level support
-    data = yf.download(tickers, period="30d", interval="1d", group_by='ticker', auto_adjust=True)
+    # ---- NEW FIX ----
+    # Add multi_level_index=False (available in yfinance >=0.2.51)
+    # This ensures single-level column names like 'Open', 'High', 'Close', etc.
+    data = yf.download(
+        tickers,
+        period="30d",
+        interval="1d",
+        group_by="ticker",
+        auto_adjust=True,
+        multi_level_index=False  # <--- critical fix for 2025 versions
+    )
+
+    # Ensure Date is a visible column
     data.reset_index(inplace=True)
 
-    # --- Fix for MultiIndex (latest yfinance update) ---
+    # ---- Fallback: flatten MultiIndex (just in case older yfinance) ----
     if isinstance(data.columns, pd.MultiIndex):
-        # If single ticker, extract its sub-data directly
+        # If single ticker, drop the extra index level
         if len(tickers) == 1:
-            data = data.xs(key=tickers[0], axis=1, level=1)
-            data.reset_index(inplace=True)
+            data.columns = data.columns.get_level_values(0)
         else:
-            # Flatten multi-level columns (e.g. ('Close','TSLA') → 'Close_TSLA')
             data.columns = [f"{a}_{b}" if b else a for a, b in data.columns]
 
-    # Clean indexing just in case
-    data = data.loc[:, ~data.columns.duplicated()]
-    data = data.rename(columns=lambda x: x.strip() if isinstance(x, str) else x)
-
     return data
+
 
 
 def fetch_news_data(query, api_key):
