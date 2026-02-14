@@ -5,7 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import auth as auth_routes
 from app.api.routes import health as health_routes
+from app.api.routes import portfolio as portfolio_routes
 from app.api.routes import stock as stock_routes
+from app.api.routes import watchlist as watchlist_routes
 from app.config import settings
 from app.db.session import Base, engine
 
@@ -38,4 +40,6 @@ if settings.BACKEND_CORS_ORIGINS:
 app.include_router(health_routes.router, prefix="/api")
 app.include_router(auth_routes.router, prefix="/api")
 app.include_router(stock_routes.router, prefix="/api")
+app.include_router(watchlist_routes.router, prefix="/api")
+app.include_router(portfolio_routes.router, prefix="/api")
 

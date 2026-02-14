@@ -1,65 +1,89 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from app.config import settings
 import threading
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
+import yfinance as yf
 from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/stock", tags=["stock"])
 
-_CACHE_TTL_SECONDS = 5 * 60
+_CACHE_TTL_SECONDS = 5 * 60  # 5 minutes
 
 
+# ----- Quote cache -----
 @dataclass(frozen=True)
-class _CacheEntry:
+class _QuoteCacheEntry:
     expires_at_monotonic: float
-    value: StockDataResponse
+    value: "StockQuoteResponse"
 
 
-_cache_lock = threading.Lock()
-_stock_cache: Dict[str, _CacheEntry] = {}
+_quote_cache_lock = threading.Lock()
+_quote_cache: Dict[str, _QuoteCacheEntry] = {}
 
 
-def _cache_get(ticker: str) -> Optional[StockDataResponse]:
+def _quote_cache_get(ticker: str) -> Optional["StockQuoteResponse"]:
     now = time.monotonic()
-    with _cache_lock:
-        entry = _stock_cache.get(ticker)
+    with _quote_cache_lock:
+        entry = _quote_cache.get(ticker)
         if not entry:
             return None
         if entry.expires_at_monotonic <= now:
-            _stock_cache.pop(ticker, None)
+            _quote_cache.pop(ticker, None)
             return None
         return entry.value
 
 
-def _cache_set(ticker: str, value: StockDataResponse) -> None:
+def _quote_cache_set(ticker: str, value: "StockQuoteResponse") -> None:
     expires = time.monotonic() + _CACHE_TTL_SECONDS
-    with _cache_lock:
-        _stock_cache[ticker] = _CacheEntry(expires_at_monotonic=expires, value=value)
+    with _quote_cache_lock:
+        _quote_cache[ticker] = _QuoteCacheEntry(expires_at_monotonic=expires, value=value)
 
 
-def _is_rate_limited_error(exc: Exception) -> bool:
-    """
-    Best-effort detection of Yahoo Finance throttling.
-    yfinance may surface this in different exception shapes/messages.
-    """
-    msg = str(exc).lower()
-    if "429" in msg or "too many requests" in msg or "rate limit" in msg:
-        return True
-    # Some underlying HTTP libraries expose status_code / response
-    status_code = getattr(exc, "status_code", None)
-    if status_code == 429:
-        return True
-    response = getattr(exc, "response", None)
-    if response is not None and getattr(response, "status_code", None) == 429:
-        return True
-    return False
+# ----- Candle cache -----
+@dataclass(frozen=True)
+class _CandleCacheEntry:
+    expires_at_monotonic: float
+    value: StockDataResponse
+
+
+_candle_cache_lock = threading.Lock()
+_candle_cache: Dict[str, _CandleCacheEntry] = {}
+
+
+def _candle_cache_get(ticker: str) -> Optional[StockDataResponse]:
+    now = time.monotonic()
+    with _candle_cache_lock:
+        entry = _candle_cache.get(ticker)
+        if not entry:
+            return None
+        if entry.expires_at_monotonic <= now:
+            _candle_cache.pop(ticker, None)
+            return None
+        return entry.value
+
+
+def _candle_cache_set(ticker: str, value: StockDataResponse) -> None:
+    expires = time.monotonic() + _CACHE_TTL_SECONDS
+    with _candle_cache_lock:
+        _candle_cache[ticker] = _CandleCacheEntry(expires_at_monotonic=expires, value=value)
+
+
+# ----- Response models -----
+class StockQuoteResponse(BaseModel):
+    ticker: str
+    price: float
+    change: float
+    percent_change: float
+    high: float
+    low: float
+    open: float
+    previous_close: float
 
 
 class PriceDataPoint(BaseModel):
@@ -79,144 +103,147 @@ class StockDataResponse(BaseModel):
     data_points: List[PriceDataPoint]
 
 
-@router.get("/{ticker}", response_model=StockDataResponse, summary="Get stock price data")
+# ----- Helpers -----
+def _finnhub_get(url: str, params: Dict[str, Any], ticker: str) -> Dict[str, Any]:
+    """Call Finnhub API; raise HTTPException on error."""
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+    except requests.RequestException:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to reach Finnhub API.",
+        )
+    if resp.status_code == 429:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Finnhub rate limit reached. Please wait a few minutes and try again. "
+                "If this persists, reduce request frequency."
+            ),
+        )
+    if resp.status_code == 403:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Finnhub access forbidden (403). Check that FINNHUB_API_KEY is valid and your plan allows this endpoint."
+            ),
+        )
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Finnhub API error (status {resp.status_code}).",
+        )
+    return resp.json()
+
+
+# ----- Routes -----
+@router.get("/{ticker}/quote", response_model=StockQuoteResponse, summary="Get real-time quote")
+def get_stock_quote(
+    ticker: str = Path(..., description="Stock ticker symbol (e.g., AAPL, TSLA)", min_length=1, max_length=10)
+) -> StockQuoteResponse:
+    """
+    Fetch real-time quote for a stock from Finnhub.
+    Returns current price, change, percent change, and session OHLC.
+    """
+    ticker_upper = ticker.upper().strip()
+    if not ticker_upper:
+        raise HTTPException(status_code=400, detail="Ticker symbol cannot be empty")
+
+    cached = _quote_cache_get(ticker_upper)
+    if cached is not None:
+        return cached
+
+    api_key = settings.FINNHUB_API_KEY
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="FINNHUB_API_KEY is not configured on the server.",
+        )
+
+    url = "https://finnhub.io/api/v1/quote"
+    params = {"symbol": ticker_upper, "token": api_key}
+    data = _finnhub_get(url, params, ticker_upper)
+
+    # Finnhub quote: c, d, dp, h, l, o, pc (current, change, percent change, high, low, open, previous close)
+    c = data.get("c")
+    if c is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No quote data available for ticker '{ticker_upper}'. The ticker may be invalid or delisted.",
+        )
+
+    response = StockQuoteResponse(
+        ticker=ticker_upper,
+        price=float(c),
+        change=float(data.get("d") or 0),
+        percent_change=float(data.get("dp") or 0),
+        high=float(data.get("h") or 0),
+        low=float(data.get("l") or 0),
+        open=float(data.get("o") or 0),
+        previous_close=float(data.get("pc") or 0),
+    )
+    _quote_cache_set(ticker_upper, response)
+    return response
+
+
+@router.get("/{ticker}", response_model=StockDataResponse, summary="Get stock price data (candles)")
 def get_stock_data(
     ticker: str = Path(..., description="Stock ticker symbol (e.g., AAPL, TSLA)", min_length=1, max_length=10)
 ) -> StockDataResponse:
     """
-    Fetch the last 30 days of daily price data for a given stock ticker.
-    
+    Fetch the last 30 days of daily price data for a given stock ticker from yfinance.
     Returns OHLCV (Open, High, Low, Close, Volume) data points.
     """
-    # Normalize ticker to uppercase
     ticker_upper = ticker.upper().strip()
-    
     if not ticker_upper:
         raise HTTPException(status_code=400, detail="Ticker symbol cannot be empty")
 
-    cached = _cache_get(ticker_upper)
+    cached = _candle_cache_get(ticker_upper)
     if cached is not None:
         return cached
-    
+
     try:
-        api_key = settings.FINNHUB_API_KEY
-        if not api_key:
-            raise HTTPException(
-                status_code=500,
-                detail="FINNHUB_API_KEY is not configured on the server.",
-            )
-
-        base_url = "https://finnhub.io/api/v1/stock/candle"
-
-        def fetch_candles(days: int) -> dict:
-            now = int(time.time())
-            start = now - days * 24 * 60 * 60
-            params = {
-                "symbol": ticker_upper,
-                "resolution": "D",
-                "from": start,
-                "to": now,
-                "token": api_key,
-            }
-            try:
-                print("Fetching stock data from Finnhub for", ticker_upper)
-                resp = requests.get(base_url, params=params, timeout=10)
-            except Exception as exc:
-                # Network/requests-level error or timeout
-                raise HTTPException(
-                    status_code=502,
-                    detail="Failed to fetch stock data from Finnhub.",
-                )
-
-            if resp.status_code == 429:
-                raise HTTPException(
-                    status_code=429,
-                    detail=(
-                        "Finnhub rate limit reached. Please wait a few minutes and try again. "
-                        "If this persists, reduce request frequency."
-                    ),
-                )
-            if resp.status_code != 200:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Finnhub API error (status {resp.status_code}).",
-                )
-
-            return resp.json()
-
-        data = fetch_candles(30)
-
-        if data.get("s") != "ok" or not data.get("t"):
-            # Small delay then retry with a longer window
-            time.sleep(1)
-            data = fetch_candles(90)
-
-        if data.get("s") != "ok" or not data.get("t"):
-            raise HTTPException(
-                status_code=404,
-                detail=f"No price data available for ticker '{ticker_upper}'. The ticker may be invalid or delisted.",
-            )
-
-        timestamps = data.get("t", [])
-        opens = data.get("o", [])
-        highs = data.get("h", [])
-        lows = data.get("l", [])
-        closes = data.get("c", [])
-        volumes = data.get("v", [])
-
-        # Convert Finnhub response to list of PriceDataPoint
-        data_points: List[PriceDataPoint] = []
-        for ts, o, h, l, c, v in zip(
-            timestamps, opens, highs, lows, closes, volumes
-        ):
-            date_str = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
-            data_points.append(
-                PriceDataPoint(
-                    date=date_str,
-                    open=float(o),
-                    high=float(h),
-                    low=float(l),
-                    close=float(c),
-                    volume=int(v),
-                )
-            )
-        
-        # Use simple defaults; Finnhub has per-symbol metadata but we avoid extra calls.
-        name = ticker_upper
-        currency = "USD"
-        
-        response = StockDataResponse(
-            ticker=ticker_upper,
-            name=name,
-            currency=currency,
-            period_days=30,
-            data_points=data_points,
-        )
-
-        _cache_set(ticker_upper, response)
-        return response
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
+        yf_ticker = yf.Ticker(ticker_upper)
+        df = yf_ticker.history(period="30d", interval="1d")
     except Exception as e:
-        # Handle yfinance errors and other unexpected errors
-        if _is_rate_limited_error(e):
-            raise HTTPException(
-                status_code=429,
-                detail=(
-                    "Yahoo Finance rate limit reached. Please wait a few minutes and try again. "
-                    "If this persists, reduce request frequency."
-                ),
-            )
-
-        error_msg = str(e)
-        if "No data found" in error_msg or "symbol may be delisted" in error_msg.lower():
-            raise HTTPException(
-                status_code=404,
-                detail=f"Ticker '{ticker_upper}' not found or has no available data."
-            )
         raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching stock data for '{ticker_upper}': {error_msg}"
+            status_code=502,
+            detail=f"Failed to fetch historical data for '{ticker_upper}': {str(e)}",
         )
+
+    if df is None or df.empty:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No historical price data available for ticker '{ticker_upper}'. The ticker may be invalid or delisted.",
+        )
+
+    # yfinance DataFrame: index is DatetimeIndex, columns are Open, High, Low, Close, Volume
+    data_points: List[PriceDataPoint] = []
+    for idx, row in df.iterrows():
+        date_str = idx.strftime("%Y-%m-%d")
+        data_points.append(
+            PriceDataPoint(
+                date=date_str,
+                open=float(row["Open"]),
+                high=float(row["High"]),
+                low=float(row["Low"]),
+                close=float(row["Close"]),
+                volume=int(row["Volume"]) if row["Volume"] == row["Volume"] else 0,  # NaN check for missing volume
+            )
+        )
+
+    if not data_points:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No historical price data available for ticker '{ticker_upper}'. The ticker may be invalid or delisted.",
+        )
+
+    response = StockDataResponse(
+        ticker=ticker_upper,
+        name=ticker_upper,
+        currency="USD",
+        period_days=30,
+        data_points=data_points,
+    )
+    _candle_cache_set(ticker_upper, response)
+    return response
