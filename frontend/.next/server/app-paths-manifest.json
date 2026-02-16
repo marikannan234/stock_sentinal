@@ -1,0 +1,10 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/(auth)/register/page": "app/(auth)/register/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/page": "app/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/stocks/[ticker]/page": "app/(dashboard)/stocks/[ticker]/page.js",
+  "/(dashboard)/watchlist/page": "app/(dashboard)/watchlist/page.js",
+  "/(dashboard)/portfolio/page": "app/(dashboard)/portfolio/page.js"
+}

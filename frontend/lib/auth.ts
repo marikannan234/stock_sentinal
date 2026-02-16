@@ -16,6 +16,7 @@ type AuthState = {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName?: string) => Promise<void>;
   logout: () => void;
+  clearError: () => void;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -30,13 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   async login(email, password) {
     try {
       set({ loading: true, error: null });
-      const params = new URLSearchParams();
-      params.append("username", email);
-      params.append("password", password);
-
-      const { data } = await api.post("/auth/login", params.toString(), {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      });
+      const { data } = await api.post("/auth/login-json", { email, password });
 
       const token = data.access_token as string;
       if (typeof window !== "undefined") {
@@ -47,10 +42,23 @@ export const useAuthStore = create<AuthState>((set) => ({
         token,
         user: { email },
         loading: false,
+        error: null,
       });
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.detail ?? "Unable to login. Please try again.";
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string | { msg?: string }[] } }; message?: string };
+      const d = e?.response?.data?.detail;
+      let msg: string;
+      if (d !== undefined && d !== null) {
+        msg = Array.isArray(d)
+          ? d.map((x) => (typeof x === "object" && x?.msg ? x.msg : String(x))).join(", ")
+          : typeof d === "string"
+            ? d
+            : "Unable to login. Please try again.";
+      } else {
+        msg = e?.message === "Network Error"
+          ? "Cannot reach server. Check that the backend is running and CORS is configured."
+          : "Unable to login. Please try again.";
+      }
       set({ error: msg, loading: false });
     }
   },
@@ -58,17 +66,25 @@ export const useAuthStore = create<AuthState>((set) => ({
   async register(email, password, fullName) {
     try {
       set({ loading: true, error: null });
-      await api.post("/auth/register", {
-        email,
-        password,
-        full_name: fullName,
-      });
-      // Auto-login after registration
-      await (useAuthStore.getState().login(email, password) as any);
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.detail ??
-        "Unable to register. Please check your details.";
+      const body: { email: string; password: string; full_name?: string } = { email, password };
+      if (fullName && fullName.trim()) body.full_name = fullName.trim();
+      await api.post("/auth/register", body);
+      set({ loading: false, error: null });
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string | { msg?: string }[] } }; message?: string };
+      const d = e?.response?.data?.detail;
+      let msg: string;
+      if (d !== undefined && d !== null) {
+        msg = Array.isArray(d)
+          ? d.map((x) => (typeof x === "object" && x?.msg ? x.msg : String(x))).join(", ")
+          : typeof d === "string"
+            ? d
+            : "Unable to register. Please check your details.";
+      } else {
+        msg = e?.message === "Network Error"
+          ? "Cannot reach server. Check that the backend is running and CORS is configured."
+          : "Unable to register. Please check your details.";
+      }
       set({ error: msg, loading: false });
     }
   },
@@ -77,7 +93,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("stocksentinel_token");
     }
-    set({ user: null, token: null });
+    set({ user: null, token: null, error: null });
+  },
+
+  clearError() {
+    set({ error: null });
   },
 }));
 

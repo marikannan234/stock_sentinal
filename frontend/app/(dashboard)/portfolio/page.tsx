@@ -1,10 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api-client";
+import { useInterval } from "@/lib/useInterval";
+
+function PortfolioSkeleton() {
+  return (
+    <div className="space-y-2">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div
+          key={i}
+          className="h-12 animate-pulse rounded-xl border border-slate-800 bg-slate-800/40"
+        />
+      ))}
+    </div>
+  );
+}
 
 type Holding = {
   ticker: string;
@@ -36,7 +50,7 @@ export default function PortfolioPage() {
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
-  const fetchPortfolio = async () => {
+  const fetchPortfolioData = useCallback(async () => {
     try {
       setError(null);
       const { data: positions } = await api.get<Holding[]>("/portfolio");
@@ -69,19 +83,28 @@ export default function PortfolioPage() {
       );
       setHoldings(withQuotes);
     } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401) return;
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        "Failed to load portfolio.";
+        typeof detail === "string" &&
+        (detail.includes("credential") || detail.includes("token") || detail.includes("unauthorized"))
+          ? "Session expired. Please log in again."
+          : (detail ?? "Failed to load portfolio.");
       setError(msg);
       setHoldings([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchPortfolio();
-  }, []);
+    fetchPortfolioData();
+  }, [fetchPortfolioData]);
+
+  useInterval(() => {
+    void fetchPortfolioData();
+  }, 10000);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,11 +122,16 @@ export default function PortfolioPage() {
       setAddTicker("");
       setAddQuantity("");
       setAddPrice("");
-      await fetchPortfolio();
+      await fetchPortfolioData();
     } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401) return;
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        "Failed to add position.";
+        typeof detail === "string" &&
+        (detail.includes("credential") || detail.includes("token") || detail.includes("unauthorized"))
+          ? "Session expired. Please log in again."
+          : (detail ?? "Failed to add position.");
       setAddError(msg);
     } finally {
       setAddSubmitting(false);
@@ -113,16 +141,16 @@ export default function PortfolioPage() {
   const handleRemove = async (ticker: string) => {
     try {
       await api.delete(`/portfolio/${ticker}`);
-      await fetchPortfolio();
+      await fetchPortfolioData();
     } catch {
       // ignore
     }
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Portfolio</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-100">Portfolio</h1>
         <p className="mt-1 text-sm text-slate-400">
           Overview of your holdings and current values.
         </p>
@@ -167,7 +195,7 @@ export default function PortfolioPage() {
 
       <Card className="space-y-4">
         {loading ? (
-          <p className="text-sm text-slate-400">Loading portfolio…</p>
+          <PortfolioSkeleton />
         ) : error ? (
           <p className="text-sm text-red-400">{error}</p>
         ) : holdings.length === 0 ? (

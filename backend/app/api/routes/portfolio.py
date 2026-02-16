@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db_session
+from app.api.routes.stock import fetch_stock_quote
 from app.models.user import User
 from app.models.portfolio import Portfolio
 
@@ -19,6 +20,13 @@ class PortfolioAddBody(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=16, description="Stock ticker (e.g. AAPL)")
     quantity: float = Field(..., gt=0, description="Number of shares")
     price: float = Field(..., gt=0, description="Price per share for this lot")
+
+
+class PortfolioSummaryResponse(BaseModel):
+    total_invested: float = Field(..., description="Sum of (quantity * average_price) for all holdings")
+    current_value: float = Field(..., description="Sum of (quantity * current_price) for all holdings")
+    total_pl: float = Field(..., description="Current value minus total invested")
+    percent_pl: float = Field(..., description="(total_pl / total_invested) * 100, or 0 if no holdings")
 
 
 def _holdings_list(db: Session, user_id: int) -> list[HoldingItem]:
@@ -41,6 +49,40 @@ def get_portfolio(
 ) -> list[HoldingItem]:
     """Return all holdings for the current user."""
     return _holdings_list(db, current_user.id)
+
+
+@router.get("/summary", response_model=PortfolioSummaryResponse, summary="Get portfolio summary")
+def get_portfolio_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> PortfolioSummaryResponse:
+    """
+    Return total invested, current value, and total P/L for the user's portfolio.
+    Uses live quotes from Finnhub; falls back to average price if a quote cannot be fetched.
+    """
+    holdings = _holdings_list(db, current_user.id)
+    total_invested = 0.0
+    current_value = 0.0
+
+    for h in holdings:
+        cost = h.quantity * h.average_price
+        total_invested += cost
+        try:
+            quote = fetch_stock_quote(h.ticker)
+            price = quote.price
+        except HTTPException:
+            price = h.average_price
+        current_value += h.quantity * price
+
+    total_pl = current_value - total_invested
+    percent_pl = (total_pl / total_invested * 100) if total_invested > 0 else 0.0
+
+    return PortfolioSummaryResponse(
+        total_invested=round(total_invested, 2),
+        current_value=round(current_value, 2),
+        total_pl=round(total_pl, 2),
+        percent_pl=round(percent_pl, 2),
+    )
 
 
 @router.post("", response_model=list[HoldingItem], status_code=status.HTTP_201_CREATED, summary="Add or update position")

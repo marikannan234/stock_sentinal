@@ -10,7 +10,7 @@ import { useAuthStore } from "@/lib/auth";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register, loading, error } = useAuthStore();
+  const { register, loading, error, clearError } = useAuthStore();
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -19,8 +19,8 @@ export default function RegisterPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     await register(email, password, fullName);
-    if (!error) {
-      router.push("/dashboard");
+    if (!useAuthStore.getState().error) {
+      router.push("/login?registered=1");
     }
   }
 
@@ -28,7 +28,7 @@ export default function RegisterPage() {
     <div className="flex min-h-[calc(100vh-56px)] items-center justify-center px-4">
       <Card className="w-full max-w-md space-y-6">
         <div>
-          <h1 className="text-xl font-semibold">Create your account</h1>
+          <h1 className="text-xl font-semibold text-slate-100">Create your account</h1>
           <p className="mt-1 text-sm text-slate-400">
             Start monitoring sentiment and predictions for your favorite stocks.
           </p>
@@ -37,20 +37,29 @@ export default function RegisterPage() {
           <Input
             label="Full name"
             value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
+            onChange={(e) => {
+              setFullName(e.target.value);
+              clearError();
+            }}
           />
           <Input
             label="Email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              clearError();
+            }}
             required
           />
           <Input
             label="Password"
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              clearError();
+            }}
             required
           />
           {error && (
@@ -68,7 +77,7 @@ export default function RegisterPage() {
         </form>
         <p className="text-center text-sm text-slate-400">
           Already have an account?{" "}
-          <Link href="/login" className="text-accent">
+          <Link href="/login" className="text-emerald-500 hover:text-emerald-400">
             Sign in
           </Link>
         </p>

@@ -136,14 +136,12 @@ def _finnhub_get(url: str, params: Dict[str, Any], ticker: str) -> Dict[str, Any
     return resp.json()
 
 
-# ----- Routes -----
-@router.get("/{ticker}/quote", response_model=StockQuoteResponse, summary="Get real-time quote")
-def get_stock_quote(
-    ticker: str = Path(..., description="Stock ticker symbol (e.g., AAPL, TSLA)", min_length=1, max_length=10)
-) -> StockQuoteResponse:
+# ----- Reusable quote fetcher (for portfolio summary, etc.) -----
+def fetch_stock_quote(ticker: str) -> StockQuoteResponse:
     """
     Fetch real-time quote for a stock from Finnhub.
     Returns current price, change, percent change, and session OHLC.
+    Raises HTTPException on error. Uses cache.
     """
     ticker_upper = ticker.upper().strip()
     if not ticker_upper:
@@ -184,6 +182,15 @@ def get_stock_quote(
     )
     _quote_cache_set(ticker_upper, response)
     return response
+
+
+# ----- Routes -----
+@router.get("/{ticker}/quote", response_model=StockQuoteResponse, summary="Get real-time quote")
+def get_stock_quote(
+    ticker: str = Path(..., description="Stock ticker symbol (e.g., AAPL, TSLA)", min_length=1, max_length=10)
+) -> StockQuoteResponse:
+    """Fetch real-time quote for a stock from Finnhub."""
+    return fetch_stock_quote(ticker)
 
 
 @router.get("/{ticker}", response_model=StockDataResponse, summary="Get stock price data (candles)")

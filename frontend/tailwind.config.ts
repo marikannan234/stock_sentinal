@@ -7,10 +7,13 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+      },
       colors: {
-        background: "#050816",
+        background: "#020617",
         sidebar: "#020617",
-        card: "#020617",
+        card: "#0f172a",
         accent: "#22c55e",
       },
     },
