@@ -11,3 +11,15 @@ a {
   @apply transition;
 }
 
+@keyframes ticker-marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.ticker-marquee {
+  animation: ticker-marquee 30s linear infinite;
+}

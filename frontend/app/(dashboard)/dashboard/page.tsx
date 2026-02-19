@@ -382,7 +382,7 @@ export default function DashboardPage() {
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {popular.map((stock) => {
-              const logo = getLogoUrl(stock.ticker);
+              const logoUrl = getLogoUrl(stock.ticker);
               const isUp = stock.percent_change >= 0;
               return (
                 <Link
@@ -392,14 +392,15 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      {logo && (
-                        <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-slate-800 bg-slate-900/80">
-                          <img
-                            src={logo}
-                            alt={`${stock.ticker} logo`}
-                            className="h-6 w-6 object-contain"
-                          />
-                        </span>
+                      {logoUrl && (
+                        <img
+                          src={logoUrl}
+                          alt={`${stock.ticker} logo`}
+                          className="h-8 w-8 rounded-full bg-slate-800 p-1"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
                       )}
                       <div>
                         <p className="text-sm font-semibold text-slate-100">
