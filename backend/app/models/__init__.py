@@ -6,6 +6,7 @@ from .watchlist import Watchlist  # noqa: F401
 from .portfolio import Portfolio  # noqa: F401
 from .sentiment import SentimentRecord  # noqa: F401
 from .prediction import StockPrediction  # noqa: F401
+from .alert import Alert, AlertCondition  # noqa: F401
 
 __all__ = [
     "Base",
@@ -15,5 +16,7 @@ __all__ = [
     "Portfolio",
     "SentimentRecord",
     "StockPrediction",
+    "Alert",
+    "AlertCondition",
 ]
 

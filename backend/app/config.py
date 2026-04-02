@@ -42,6 +42,25 @@ class Settings(BaseSettings):
     # External APIs
     FINNHUB_API_KEY: str | None = None
 
+    # Email Configuration
+    MAIL_USERNAME: str = "your-email@example.com"
+    MAIL_PASSWORD: str = "your-app-password"
+    MAIL_FROM: str = "your-email@example.com"
+    MAIL_PORT: int = 587
+    MAIL_SERVER: str = "smtp.gmail.com"
+    MAIL_STARTTLS: bool = True
+    MAIL_SSL_TLS: bool = False
+    MAIL_FROM_NAME: str = "Stock Sentinel Alerts"
+    
+    # Email Features
+    ENABLE_EMAIL_NOTIFICATIONS: bool = True
+    EMAIL_NOTIFICATION_RETRY_COUNT: int = 3
+
+    # Alert Configuration
+    ALERT_COOLDOWN_MINUTES: int = 10  # Minutes between duplicate alert sends
+    ALERT_DEV_MODE: bool = False  # Skip cooldown for testing (set to True locally)
+    ALERT_LOG_COOLDOWN_CHECKS: bool = True  # Log when cooldown is active (verbose)
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

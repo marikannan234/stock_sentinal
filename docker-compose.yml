@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: stocksentinel
       POSTGRES_USER: stocksentinel
-      POSTGRES_PASSWORD: stocksentinel_password
+      POSTGRES_PASSWORD: password  # Matches .env DATABASE_URL password
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -15,6 +15,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - stocksentinel-network
 
   backend:
     build:
@@ -23,13 +26,17 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg2://stocksentinel:stocksentinel_password@db:5432/stocksentinel
+      # For Docker: use 'db' (service name) instead of localhost
+      DATABASE_URL: postgresql+psycopg2://stocksentinel:password@db:5432/stocksentinel
       BACKEND_CORS_ORIGINS: '["http://localhost:3000"]'
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8000:8000"
+    networks:
+      - stocksentinel-network
+    restart: unless-stopped
 
   frontend:
     build:
@@ -41,7 +48,15 @@ services:
       - backend
     ports:
       - "3000:3000"
+    networks:
+      - stocksentinel-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
+
+networks:
+  stocksentinel-network:
+    driver: bridge
 

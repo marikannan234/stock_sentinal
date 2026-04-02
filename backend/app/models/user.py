@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy.orm import relationship
 
 from app.db.session import Base
 
@@ -18,4 +19,7 @@ class User(Base):
     updated_at: datetime = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+    
+    # Relationships
+    alerts = relationship("Alert", back_populates="user", cascade="all, delete-orphan")
 
