@@ -23,8 +23,26 @@ class AlertBase(BaseModel):
     stock_symbol: str = Field(..., min_length=1, max_length=16, description="Stock ticker symbol (e.g., AAPL)")
     # PYDANTIC V2 FIX: Simple Optional with default None - no field_validator to avoid required flag
     condition: Optional[AlertCondition] = None
-    target_value: float = Field(..., gt=0, description="Target value (price or multiplier depending on alert type)")
-    alert_type: AlertType = Field(default=AlertType.PRICE, description="Type of alert (price, percentage_change, volume_spike, crash, custom)")
+    target_value: Optional[float] = Field(default=None, gt=0, description="Target value (price or multiplier depending on alert type)")
+    alert_type: AlertType = Field(default=AlertType.PRICE, description="Type of alert (price, percentage_change, volume_spike, crash, sma_above, sma_below, sma_crossover, ema_above, ema_below, ema_crossover, rsi_overbought, rsi_oversold, rsi_crossover, strong_buy_signal, strong_sell_signal, custom)")
+    sma_period: Optional[int] = Field(
+        default=None,
+        ge=2,
+        le=500,
+        description="SMA period in days for SMA-based alerts (must be 2-500, required for sma_above/sma_below/sma_crossover and combined signals)"
+    )
+    ema_period: Optional[int] = Field(
+        default=None,
+        ge=2,
+        le=500,
+        description="EMA period in days for EMA-based alerts (must be 2-500, required for ema_above/ema_below/ema_crossover and combined signals)"
+    )
+    rsi_period: Optional[int] = Field(
+        default=None,
+        ge=2,
+        le=100,
+        description="RSI period in days for RSI-based alerts (must be 2-100, required for rsi_overbought/rsi_oversold/rsi_crossover and combined signals)"
+    )
     
     @field_validator("stock_symbol", mode="before")
     @classmethod
@@ -77,6 +95,7 @@ class AlertBase(BaseModel):
         Normalize and validate condition:
         1. Convert string condition to AlertCondition enum if needed
         2. Require condition only for PRICE alerts
+        3. Validate SMA alert requirements (sma_period must be provided)
         """
         # Normalize condition from string to enum if needed
         if isinstance(self.condition, str):
@@ -102,6 +121,70 @@ class AlertBase(BaseModel):
         # PRICE alerts MUST have a condition
         if self.alert_type == AlertType.PRICE and self.condition is None:
             raise ValueError("'condition' field is REQUIRED for PRICE alerts (must be one of: >, <, >=, <=)")
+        
+        # SMA alerts MUST have sma_period
+        sma_alert_types = [AlertType.SMA_ABOVE, AlertType.SMA_BELOW, AlertType.SMA_CROSSOVER]
+        if self.alert_type in sma_alert_types:
+            if self.sma_period is None:
+                raise ValueError(f"'sma_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-500)")
+            # SMA alerts should not use condition
+            if self.condition is not None:
+                object.__setattr__(self, 'condition', None)
+            # SMA alerts should not use target_value
+            if self.target_value is not None:
+                object.__setattr__(self, 'target_value', None)
+        else:
+            # Non-SMA alerts should not have sma_period
+            if self.sma_period is not None:
+                object.__setattr__(self, 'sma_period', None)
+        
+        # EMA alerts MUST have ema_period
+        ema_alert_types = [AlertType.EMA_ABOVE, AlertType.EMA_BELOW, AlertType.EMA_CROSSOVER]
+        if self.alert_type in ema_alert_types:
+            if self.ema_period is None:
+                raise ValueError(f"'ema_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-500)")
+            # EMA alerts should not use condition
+            if self.condition is not None:
+                object.__setattr__(self, 'condition', None)
+            # EMA alerts should not use target_value
+            if self.target_value is not None:
+                object.__setattr__(self, 'target_value', None)
+        else:
+            # Non-EMA alerts should not have ema_period (unless combined signal)
+            if self.ema_period is not None and self.alert_type not in [AlertType.STRONG_BUY_SIGNAL, AlertType.STRONG_SELL_SIGNAL]:
+                object.__setattr__(self, 'ema_period', None)
+        
+        # RSI alerts MUST have rsi_period
+        rsi_alert_types = [AlertType.RSI_OVERBOUGHT, AlertType.RSI_OVERSOLD, AlertType.RSI_CROSSOVER]
+        if self.alert_type in rsi_alert_types:
+            if self.rsi_period is None:
+                raise ValueError(f"'rsi_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-100)")
+            # RSI alerts should not use condition
+            if self.condition is not None:
+                object.__setattr__(self, 'condition', None)
+            # RSI alerts should not use target_value
+            if self.target_value is not None:
+                object.__setattr__(self, 'target_value', None)
+        else:
+            # Non-RSI alerts should not have rsi_period (unless combined signal)
+            if self.rsi_period is not None and self.alert_type not in [AlertType.STRONG_BUY_SIGNAL, AlertType.STRONG_SELL_SIGNAL]:
+                object.__setattr__(self, 'rsi_period', None)
+        
+        # Combined signal alerts MUST have all three periods (sma_period, ema_period, rsi_period)
+        combined_alert_types = [AlertType.STRONG_BUY_SIGNAL, AlertType.STRONG_SELL_SIGNAL]
+        if self.alert_type in combined_alert_types:
+            if self.sma_period is None:
+                raise ValueError(f"'sma_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-500)")
+            if self.ema_period is None:
+                raise ValueError(f"'ema_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-500)")
+            if self.rsi_period is None:
+                raise ValueError(f"'rsi_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-100)")
+            # Combined alerts should not use condition
+            if self.condition is not None:
+                object.__setattr__(self, 'condition', None)
+            # Combined alerts should not use target_value
+            if self.target_value is not None:
+                object.__setattr__(self, 'target_value', None)
         
         # Other alert types don't need condition (it's optional)
         # PERCENTAGE_CHANGE: uses percentage value in target_value
@@ -148,7 +231,7 @@ class AlertResponse(AlertBase):
     is_active: bool = Field(..., description="Whether alert is currently active")
     created_at: datetime = Field(..., description="When the alert was created")
     triggered_at: Optional[datetime] = Field(None, description="When the alert was last triggered (if any)")
-    last_price: Optional[float] = Field(None, description="Last recorded price (used for percentage change tracking)")
+    last_price: Optional[float] = Field(None, description="Last recorded price (used for percentage change and SMA crossover tracking)")
     
     class Config:
         from_attributes = True

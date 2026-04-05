@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Stock Sentinel - Pro Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;family=Roboto+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container": "#201f22",
+                    "secondary-fixed-dim": "#4edea3",
+                    "on-primary-container": "#00285d",
+                    "on-tertiary": "#68000a",
+                    "surface-container-high": "#2a2a2c",
+                    "outline": "#8c909f",
+                    "surface-dim": "#131315",
+                    "inverse-surface": "#e5e1e4",
+                    "secondary-fixed": "#6ffbbe",
+                    "on-secondary-container": "#00311f",
+                    "on-surface": "#e5e1e4",
+                    "inverse-on-surface": "#313032",
+                    "on-tertiary-fixed-variant": "#930013",
+                    "surface-container-highest": "#353437",
+                    "tertiary-fixed-dim": "#ffb3ad",
+                    "tertiary": "#ffb3ad",
+                    "tertiary-fixed": "#ffdad7",
+                    "on-secondary-fixed": "#002113",
+                    "on-error-container": "#ffdad6",
+                    "surface-bright": "#39393b",
+                    "surface": "#131315",
+                    "inverse-primary": "#005ac2",
+                    "error-container": "#93000a",
+                    "on-background": "#e5e1e4",
+                    "on-tertiary-fixed": "#410004",
+                    "secondary": "#4edea3",
+                    "on-primary-fixed-variant": "#004395",
+                    "surface-variant": "#353437",
+                    "on-surface-variant": "#c2c6d6",
+                    "on-primary-fixed": "#001a42",
+                    "tertiary-container": "#ff5451",
+                    "background": "#131315",
+                    "primary-container": "#4d8eff",
+                    "on-primary": "#002e6a",
+                    "primary": "#adc6ff",
+                    "error": "#ffb4ab",
+                    "surface-container-low": "#1c1b1d",
+                    "on-tertiary-container": "#5c0008",
+                    "on-secondary-fixed-variant": "#005236",
+                    "outline-variant": "#424754",
+                    "primary-fixed-dim": "#adc6ff",
+                    "surface-tint": "#adc6ff",
+                    "primary-fixed": "#d8e2ff",
+                    "surface-container-lowest": "#0e0e10",
+                    "on-secondary": "#003824",
+                    "on-error": "#690005",
+                    "secondary-container": "#00a572"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Inter"],
+                    "body": ["Inter"],
+                    "label": ["Inter"],
+                    "mono": ["Roboto Mono"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .glass {
+            background: rgba(53, 52, 55, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .ticker-wrap {
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .ticker-content {
+            display: inline-block;
+            animation: scroll-left 40s linear infinite;
+        }
+        @keyframes scroll-left {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 w-full flex items-center justify-between px-6 h-16 bg-[#131315]/80 backdrop-blur-xl z-50 border-b border-white/5 shadow-[0_40px_40px_-15px_rgba(0,0,0,0.4)]">
+<div class="flex items-center gap-8">
+<span class="text-xl font-black tracking-tighter text-white uppercase font-headline">Stock Sentinel</span>
+<!-- Live Stock Ribbon -->
+<div class="hidden lg:block w-[400px] xl:w-[600px] border-l border-white/10 pl-6">
+<div class="ticker-wrap relative">
+<div class="ticker-content flex items-center gap-6 text-[10px] uppercase font-mono tracking-wider">
+<span class="flex items-center gap-1.5"><b class="text-white">AAPL</b> <span class="text-secondary">189.43 +1.2%</span></span>
+<span class="flex items-center gap-1.5"><b class="text-white">TSLA</b> <span class="text-tertiary">175.22 -0.8%</span></span>
+<span class="flex items-center gap-1.5"><b class="text-white">MSFT</b> <span class="text-secondary">415.50 +0.4%</span></span>
+<span class="flex items-center gap-1.5"><b class="text-white">AMZN</b> <span class="text-secondary">178.12 +1.1%</span></span>
+<span class="flex items-center gap-1.5"><b class="text-white">NVDA</b> <span class="text-secondary">822.79 +2.3%</span></span>
+<span class="flex items-center gap-1.5"><b class="text-white">GOOGL</b> <span class="text-tertiary">142.10 -0.2%</span></span>
+<span class="flex items-center gap-1.5"><b class="text-white">META</b> <span class="text-secondary">484.02 +0.9%</span></span>
+<!-- Repeated for smooth scroll -->
+<span class="flex items-center gap-1.5"><b class="text-white">AAPL</b> <span class="text-secondary">189.43 +1.2%</span></span>
+<span class="flex items-center gap-1.5"><b class="text-white">TSLA</b> <span class="text-tertiary">175.22 -0.8%</span></span>
+<span class="flex items-center gap-1.5"><b class="text-white">MSFT</b> <span class="text-secondary">415.50 +0.4%</span></span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group hidden md:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="bg-surface-container-lowest border-none rounded-lg pl-10 pr-4 py-1.5 text-sm w-64 focus:ring-1 focus:ring-primary transition-all duration-300" placeholder="Search Markets..." type="text"/>
+</div>
+<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary-container px-4 py-1.5 rounded-lg text-sm font-semibold tracking-tight cursor-pointer active:scale-95 transition-all">Quick Trade</button>
+<div class="cursor-pointer hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-[#adc6ff] text-2xl" data-icon="account_circle">account_circle</span>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-[#1c1b1d] flex flex-col py-8 z-40 hidden md:flex">
+<div class="px-6 mb-12 mt-16">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="minimalist futuristic abstract geometric logo with sharp angles in electric blue and obsidian black" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQaEAISH5gRpyuef7BREf7SGI6ZUZs5HHnUdRT-whxWZpzsuoWXPJfM_EcNQ3BpzF92efVerrY3e6jwFX9KLp4oSKxfZ1YaWoWm9dE9RuioxtD2-P4xVBN4NDEgmMDTrJPel19OL845t4uoNUsJBpSd32KuGwOcgWWd8Y2fzn1L9AWM330duMB-ktKXuxwVEU-JmAAA7_cGCXGgMpj75UYgu5z788ElDzcsSRwuHVh0gpXC5NIyx1ClDojz6jnpAMWTpIjTn_VNvk"/>
+</div>
+<div>
+<h2 class="text-white font-bold text-sm tracking-tight">The Sentinel</h2>
+<p class="text-xs text-on-surface-variant">Pro Tier</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-4 space-y-1">
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-white font-bold bg-[#39393b] border-r-2 border-[#adc6ff] transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="dashboard">dashboard</span>
+<span class="font-['Inter'] text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white hover:translate-x-1 transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="show_chart">show_chart</span>
+<span class="font-['Inter'] text-sm font-medium">Stocks</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white hover:translate-x-1 transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="pie_chart">pie_chart</span>
+<span class="font-['Inter'] text-sm font-medium">Portfolio</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white hover:translate-x-1 transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="list_alt">list_alt</span>
+<span class="font-['Inter'] text-sm font-medium">Watchlist</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white hover:translate-x-1 transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="history">history</span>
+<span class="font-['Inter'] text-sm font-medium">Trade History</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white hover:translate-x-1 transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications_active">notifications_active</span>
+<span class="font-['Inter'] text-sm font-medium">Alerts</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white hover:translate-x-1 transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="article">article</span>
+<span class="font-['Inter'] text-sm font-medium">News</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white hover:translate-x-1 transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="help_outline">help_outline</span>
+<span class="font-['Inter'] text-sm font-medium">Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white hover:translate-x-1 transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+<span class="font-['Inter'] text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="px-6 pb-4">
+<button class="w-full py-3 bg-surface-container-high rounded-xl text-primary text-xs font-bold uppercase tracking-widest border border-primary/10 hover:bg-primary/5 transition-all active:scale-95">
+                Quick Trade
+            </button>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="md:ml-64 pt-20 px-6 pb-12">
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Portfolio Summary Section -->
+<section class="col-span-12 lg:col-span-8 space-y-6">
+<div class="glass p-8 rounded-xl border border-white/5 overflow-hidden relative">
+<div class="absolute top-0 right-0 w-1/2 h-full opacity-20 pointer-events-none">
+<div class="w-full h-full bg-gradient-to-l from-primary/30 to-transparent"></div>
+</div>
+<header class="flex justify-between items-start mb-10">
+<div>
+<p class="text-label-md text-on-surface-variant uppercase tracking-[0.2em] mb-2">Portfolio Net Worth</p>
+<h1 class="font-mono text-5xl md:text-6xl font-medium tracking-tighter text-white">
+                                $1,248,392.<span class="text-3xl text-on-surface-variant">45</span>
+</h1>
+</div>
+<div class="flex gap-2">
+<span class="bg-secondary/10 text-secondary px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">trending_up</span> +4.2%
+                            </span>
+</div>
+</header>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
+<div class="bg-surface-container-low/50 p-4 rounded-xl">
+<p class="text-xs text-on-surface-variant uppercase mb-1">Today's P&amp;L</p>
+<p class="font-mono text-2xl text-secondary">+$12,402.10</p>
+</div>
+<div class="bg-surface-container-low/50 p-4 rounded-xl">
+<p class="text-xs text-on-surface-variant uppercase mb-1">Buying Power</p>
+<p class="font-mono text-2xl text-white">$45,210.00</p>
+</div>
+<div class="bg-surface-container-low/50 p-4 rounded-xl">
+<p class="text-xs text-on-surface-variant uppercase mb-1">Total Return</p>
+<p class="font-mono text-2xl text-secondary">+28.4%</p>
+</div>
+</div>
+</div>
+<!-- Market Overview Chart -->
+<div class="bg-surface-container-low p-6 rounded-xl border border-white/5">
+<div class="flex justify-between items-center mb-6">
+<div>
+<h2 class="headline-sm font-bold text-white">Market Overview</h2>
+<p class="text-xs text-on-surface-variant">S&amp;P 500 Index Performance</p>
+</div>
+<div class="flex gap-2 bg-surface-container-lowest p-1 rounded-lg">
+<button class="px-3 py-1 text-xs font-semibold text-white bg-surface-container-highest rounded-md">1D</button>
+<button class="px-3 py-1 text-xs font-semibold text-on-surface-variant hover:text-white">1W</button>
+<button class="px-3 py-1 text-xs font-semibold text-on-surface-variant hover:text-white">1M</button>
+<button class="px-3 py-1 text-xs font-semibold text-on-surface-variant hover:text-white">1Y</button>
+</div>
+</div>
+<div class="h-[300px] w-full bg-surface-container-lowest/30 rounded-lg flex items-end relative overflow-hidden group">
+<svg class="w-full h-full preserve-3d" viewbox="0 0 1000 300">
+<defs>
+<lineargradient id="chartGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:rgba(173, 198, 255, 0.2); stop-opacity:1"></stop>
+<stop offset="100%" style="stop-color:rgba(173, 198, 255, 0); stop-opacity:1"></stop>
+</lineargradient>
+</defs>
+<path d="M0,250 Q100,220 200,240 T400,180 T600,200 T800,140 T1000,100 V300 H0 Z" fill="url(#chartGradient)"></path>
+<path d="M0,250 Q100,220 200,240 T400,180 T600,200 T800,140 T1000,100" fill="none" stroke="#adc6ff" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+<div class="bg-surface-container-highest/90 backdrop-blur-md border border-white/10 px-4 py-2 rounded shadow-2xl">
+<p class="text-xs font-mono text-primary">$5,137.08 <span class="text-white">+0.42%</span></p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Side Bento Column -->
+<aside class="col-span-12 lg:col-span-4 space-y-6">
+<!-- Watchlist / Top Performers -->
+<div class="bg-surface-container-low p-6 rounded-xl border border-white/5">
+<div class="flex justify-between items-center mb-6">
+<h2 class="text-sm font-bold text-white uppercase tracking-wider">Top Movers</h2>
+<span class="material-symbols-outlined text-on-surface-variant text-lg cursor-pointer">more_horiz</span>
+</div>
+<div class="space-y-4">
+<!-- Item -->
+<div class="flex items-center justify-between group cursor-pointer p-2 hover:bg-surface-container-high rounded-xl transition-all">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-[#2a2a2c] flex items-center justify-center text-primary font-bold">N</div>
+<div>
+<h4 class="text-sm font-bold text-white">NVDA</h4>
+<p class="text-[10px] text-on-surface-variant">Nvidia Corp</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-mono text-sm text-white">$822.79</p>
+<p class="font-mono text-[10px] text-secondary">+2.34%</p>
+</div>
+</div>
+<!-- Item -->
+<div class="flex items-center justify-between group cursor-pointer p-2 hover:bg-surface-container-high rounded-xl transition-all">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-[#2a2a2c] flex items-center justify-center text-tertiary font-bold">T</div>
+<div>
+<h4 class="text-sm font-bold text-white">TSLA</h4>
+<p class="text-[10px] text-on-surface-variant">Tesla, Inc.</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-mono text-sm text-white">$175.22</p>
+<p class="font-mono text-[10px] text-tertiary">-1.08%</p>
+</div>
+</div>
+<!-- Item -->
+<div class="flex items-center justify-between group cursor-pointer p-2 hover:bg-surface-container-high rounded-xl transition-all">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-[#2a2a2c] flex items-center justify-center text-secondary font-bold">A</div>
+<div>
+<h4 class="text-sm font-bold text-white">AAPL</h4>
+<p class="text-[10px] text-on-surface-variant">Apple Inc.</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-mono text-sm text-white">$189.43</p>
+<p class="font-mono text-[10px] text-secondary">+1.12%</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Latest News Preview Feed -->
+<div class="bg-surface-container-low p-6 rounded-xl border border-white/5">
+<h2 class="text-sm font-bold text-white uppercase tracking-wider mb-6">Market News</h2>
+<div class="space-y-6">
+<div class="group cursor-pointer">
+<p class="text-[10px] text-primary font-bold uppercase tracking-widest mb-1">Monetary Policy</p>
+<h3 class="text-sm font-medium text-on-surface leading-snug group-hover:text-primary transition-colors">Federal Reserve hints at potential rate cuts in late Q3 as inflation cools.</h3>
+<p class="text-[10px] text-on-surface-variant mt-2">2 hours ago • Reuters</p>
+</div>
+<div class="group cursor-pointer">
+<p class="text-[10px] text-secondary font-bold uppercase tracking-widest mb-1">Tech Earnings</p>
+<h3 class="text-sm font-medium text-on-surface leading-snug group-hover:text-primary transition-colors">AI hardware demand pushes semiconductor indices to all-time highs.</h3>
+<p class="text-[10px] text-on-surface-variant mt-2">5 hours ago • Bloomberg</p>
+</div>
+<div class="group cursor-pointer">
+<p class="text-[10px] text-tertiary font-bold uppercase tracking-widest mb-1">Energy</p>
+<h3 class="text-sm font-medium text-on-surface leading-snug group-hover:text-primary transition-colors">Global oil supply shifts amid new offshore discovery in Guyana.</h3>
+<p class="text-[10px] text-on-surface-variant mt-2">8 hours ago • Financial Times</p>
+</div>
+</div>
+</div>
+<!-- Quick Trade Widget -->
+<div class="glass p-6 rounded-xl border border-white/5">
+<h2 class="text-sm font-bold text-white mb-4">Quick Execution</h2>
+<div class="flex gap-2 mb-4">
+<button class="flex-1 py-2 bg-secondary/10 border border-secondary/20 text-secondary rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-secondary/20 transition-all">Buy</button>
+<button class="flex-1 py-2 bg-tertiary/10 border border-tertiary/20 text-tertiary rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-tertiary/20 transition-all">Sell</button>
+</div>
+<div class="space-y-3">
+<div>
+<label class="text-[10px] text-on-surface-variant uppercase">Asset</label>
+<div class="bg-surface-container-lowest p-2 rounded-lg border border-white/5 flex justify-between items-center cursor-pointer">
+<span class="text-sm font-mono text-white">NVDA</span>
+<span class="material-symbols-outlined text-xs">expand_more</span>
+</div>
+</div>
+<div>
+<label class="text-[10px] text-on-surface-variant uppercase">Quantity</label>
+<input class="w-full bg-surface-container-lowest border-none rounded-lg p-2 text-sm font-mono text-white focus:ring-1 focus:ring-primary" placeholder="0.00" type="number"/>
+</div>
+<button class="w-full py-3 bg-gradient-to-r from-primary to-primary-container text-on-primary-container rounded-xl text-sm font-bold mt-4 shadow-lg shadow-primary/10 active:scale-[0.98] transition-all">Review Order</button>
+</div>
+</div>
+</aside>
+</div>
+</main>
+<!-- Bottom Mobile Nav -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full bg-[#1c1b1d]/90 backdrop-blur-xl flex justify-around items-center h-16 border-t border-white/5 z-50">
+<button class="flex flex-col items-center gap-1 text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="text-[10px] font-medium">Home</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">show_chart</span>
+<span class="text-[10px] font-medium">Markets</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">pie_chart</span>
+<span class="text-[10px] font-medium">Portfolio</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">notifications</span>
+<span class="text-[10px] font-medium">Alerts</span>
+</button>
+</nav>
+</body></html>

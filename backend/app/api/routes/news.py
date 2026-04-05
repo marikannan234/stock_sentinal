@@ -1,109 +1,405 @@
+"""
+News Routes Module
+
+Comprehensive news API endpoints:
+- GET /news/global - Global market news
+- GET /news/{symbol} - Stock-specific news
+- GET /news/{symbol}/sentiment - News with sentiment analysis
+- POST /news/sentiment/analyze - Analyze sentiment of articles
+- POST /news/cache/clear - Clear news cache
+
+Features:
+- Real-time news fetching from Finnhub
+- AI-powered sentiment analysis using VADER and TextBlob
+- Investment insights generation
+- 5-minute intelligent caching
+- Production-grade error handling and logging
+"""
+
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List
+import logging
+from typing import Any, Dict, List, Optional
 
-import requests
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_user
-from app.config import settings
+from app.core.exceptions import ValidationError
 from app.models.user import User
+from app.services.news_service import (
+    get_stock_news,
+    get_global_news,
+    clear_cache,
+)
+from app.services.sentiment_service import (
+    analyze_articles,
+    generate_insight,
+    get_sentiment_summary,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/news", tags=["news"])
 
 
+# ============================================
+# Request/Response Models
+# ============================================
 class NewsArticle(BaseModel):
+    """Single news article."""
     title: str = Field(..., description="Article title/headline")
     source: str = Field(..., description="Publisher/source name")
     url: str = Field(..., description="Canonical URL")
-    published_at: str = Field(..., description="ISO8601 timestamp (UTC)")
+    summary: Optional[str] = Field(None, description="Article summary")
+    image: Optional[str] = Field(None, description="Article image URL")
+    published_at: Optional[str] = Field(None, description="ISO8601 timestamp (UTC)")
 
 
 class NewsResponse(BaseModel):
-    ticker: str
+    """Response with news articles."""
     articles: List[NewsArticle]
+    count: int
 
 
-def _finnhub_company_news(ticker: str, limit: int = 10) -> List[Dict[str, Any]]:
-    ticker_upper = ticker.upper().strip()
-    if not ticker_upper:
-        raise HTTPException(status_code=400, detail="Ticker symbol cannot be empty")
-
-    api_key = settings.FINNHUB_API_KEY
-    if not api_key:
-        raise HTTPException(status_code=500, detail="FINNHUB_API_KEY is not configured on the server.")
-
-    # Finnhub requires a date range (YYYY-MM-DD). Use last 7 days for "latest" news.
-    to_d = date.today()
-    from_d = to_d - timedelta(days=7)
-
-    url = "https://finnhub.io/api/v1/company-news"
-    params = {
-        "symbol": ticker_upper,
-        "from": from_d.isoformat(),
-        "to": to_d.isoformat(),
-        "token": api_key,
-    }
-
-    try:
-        resp = requests.get(url, params=params, timeout=10)
-    except requests.RequestException:
-        raise HTTPException(status_code=502, detail="Failed to reach Finnhub API.")
-
-    if resp.status_code == 429:
-        raise HTTPException(
-            status_code=429,
-            detail="Finnhub rate limit reached. Please wait a few minutes and try again.",
-        )
-    if resp.status_code == 403:
-        raise HTTPException(
-            status_code=502,
-            detail="Finnhub access forbidden (403). Check FINNHUB_API_KEY and plan access.",
-        )
-    if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Finnhub API error (status {resp.status_code}).")
-
-    data = resp.json()
-    if not isinstance(data, list):
-        raise HTTPException(status_code=502, detail="Unexpected Finnhub response for news.")
-
-    # Sort newest-first and clamp.
-    data_sorted = sorted(data, key=lambda x: int(x.get("datetime") or 0), reverse=True)
-    return data_sorted[: max(0, min(limit, 25))]  # hard cap for safety
+class ArticleWithSentiment(NewsArticle):
+    """News article with sentiment analysis."""
+    sentiment: str = Field(..., description="POSITIVE, NEGATIVE, or NEUTRAL")
+    sentiment_score: float = Field(..., description="Sentiment score 0.0-1.0")
+    sentiment_confidence: float = Field(..., description="Confidence 0.0-1.0")
 
 
-def _map_company_news_item(item: Dict[str, Any]) -> NewsArticle | None:
-    headline = item.get("headline")
-    source = item.get("source")
-    url = item.get("url")
-    dt = item.get("datetime")
-    if not headline or not source or not url or not dt:
-        return None
-    try:
-        published = datetime.fromtimestamp(int(dt), tz=timezone.utc).isoformat()
-    except Exception:
-        published = datetime.now(tz=timezone.utc).isoformat()
-    return NewsArticle(title=str(headline), source=str(source), url=str(url), published_at=published)
+class SentimentInsight(BaseModel):
+    """Investment insight from sentiment analysis."""
+    sentiment_score: float = Field(..., description="Overall sentiment 0.0-1.0")
+    sentiment_label: str = Field(..., description="BULLISH, BEARISH, or NEUTRAL")
+    recommendation: str = Field(..., description="Investment recommendation")
+    confidence: float = Field(..., description="Confidence 0.0-1.0")
+    analysis_count: int = Field(..., description="Number of articles analyzed")
 
 
-@router.get("/{ticker}", response_model=NewsResponse, summary="Get latest news for ticker")
-def get_ticker_news(
-    ticker: str = Path(..., description="Stock ticker symbol (e.g., AAPL, TSLA)", min_length=1, max_length=10),
-    _: User = Depends(get_current_user),
+class NewsWithSentimentResponse(BaseModel):
+    """Complete response with news and sentiment analysis."""
+    articles: List[ArticleWithSentiment]
+    sentiment_analysis: SentimentInsight
+    count: int
+
+
+class AnalyzeSentimentRequest(BaseModel):
+    """Request to analyze sentiment of articles."""
+    articles: List[Dict[str, Any]] = Field(..., description="List of articles to analyze")
+
+
+# ============================================
+# Global News Endpoint
+# ============================================
+@router.get(
+    "/global",
+    response_model=NewsResponse,
+    summary="Get global market news",
+    description="Fetch latest financial and economic news from around the world.",
+)
+async def get_global_news_endpoint(
+    limit: int = Query(30, ge=1, le=100, description="Number of articles to return"),
+    current_user: User = Depends(get_current_user),
 ) -> NewsResponse:
     """
-    Fetch latest 5–10 news articles for a ticker from Finnhub company-news endpoint.
-    Returns title, source, url, published_at (UTC).
+    Get global market news.
+    
+    Features:
+    - Stock market news
+    - Economic news (inflation, interest rates, recession)
+    - Company news affecting markets
+    - 5-minute intelligent cache
+    
+    Returns:
+        NewsResponse with articles list
     """
-    raw = _finnhub_company_news(ticker, limit=10)
-    articles: List[NewsArticle] = []
-    for it in raw:
-        mapped = _map_company_news_item(it)
-        if mapped is not None:
-            articles.append(mapped)
-        if len(articles) >= 10:
-            break
-    return NewsResponse(ticker=ticker.upper().strip(), articles=articles)
+    try:
+        logger.info(f"Fetching global news (limit: {limit})")
+        
+        articles = get_global_news(use_cache=True, limit=limit)
+        
+        # Convert to Pydantic models
+        news_articles = [
+            NewsArticle(
+                title=article["title"],
+                source=article["source"],
+                url=article["url"],
+                summary=article.get("summary"),
+                image=article.get("image"),
+                published_at=article.get("published_at"),
+            )
+            for article in articles
+        ]
+        
+        logger.info(f"Successfully retrieved {len(news_articles)} global news articles")
+        
+        return NewsResponse(
+            articles=news_articles,
+            count=len(news_articles),
+        )
+    
+    except Exception as e:
+        logger.error(f"Error fetching global news: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch global news")
+
+
+# ============================================
+# Stock-Specific News Endpoint
+# ============================================
+@router.get(
+    "/{symbol}",
+    response_model=NewsResponse,
+    summary="Get stock-specific news",
+    description="Fetch latest news for a specific stock symbol.",
+)
+async def get_stock_news_endpoint(
+    symbol: str = Path(..., min_length=1, max_length=10, description="Stock ticker symbol (e.g., AAPL)"),
+    limit: int = Query(20, ge=1, le=100, description="Number of articles to return"),
+    current_user: User = Depends(get_current_user),
+) -> NewsResponse:
+    """
+    Get news for a specific stock.
+    
+    Features:
+    - Company-specific updates
+    - Earnings announcements
+    - Analyst opinions
+    - 5-minute intelligent cache
+    
+    Args:
+        symbol: Stock ticker symbol (e.g., AAPL, TSLA)
+        limit: Maximum number of articles to return
+    
+    Returns:
+        NewsResponse with articles for the stock
+    """
+    try:
+        logger.info(f"Fetching news for {symbol} (limit: {limit})")
+        
+        articles = get_stock_news(symbol=symbol, use_cache=True, limit=limit)
+        
+        # Convert to Pydantic models
+        news_articles = [
+            NewsArticle(
+                title=article["title"],
+                source=article["source"],
+                url=article["url"],
+                summary=article.get("summary"),
+                image=article.get("image"),
+                published_at=article.get("published_at"),
+            )
+            for article in articles
+        ]
+        
+        logger.info(f"Successfully retrieved {len(news_articles)} articles for {symbol}")
+        
+        return NewsResponse(
+            articles=news_articles,
+            count=len(news_articles),
+        )
+    
+    except ValidationError as e:
+        logger.warning(f"Validation error for symbol {symbol}: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    
+    except Exception as e:
+        logger.error(f"Error fetching news for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch news for {symbol}")
+
+
+# ============================================
+# Stock News with Sentiment Analysis Endpoint
+# ============================================
+@router.get(
+    "/{symbol}/sentiment",
+    response_model=NewsWithSentimentResponse,
+    summary="Get stock news with sentiment analysis",
+    description="Fetch news with AI-powered sentiment and investment insights.",
+)
+async def get_stock_news_with_sentiment(
+    symbol: str = Path(..., min_length=1, max_length=10, description="Stock ticker symbol"),
+    limit: int = Query(20, ge=1, le=100, description="Number of articles to return"),
+    current_user: User = Depends(get_current_user),
+) -> NewsWithSentimentResponse:
+    """
+    Get stock news with AI sentiment analysis and investment recommendations.
+    
+    Features:
+    - Fetches latest news for the stock
+    - Analyzes sentiment of each article (POSITIVE/NEGATIVE/NEUTRAL)
+    - Generates overall investment insight (BULLISH/BEARISH/NEUTRAL)
+    - Provides confidence scores
+    - 5-minute intelligent cache
+    
+    Args:
+        symbol: Stock ticker symbol (e.g., AAPL, TSLA)
+        limit: Maximum number of articles to return
+    
+    Returns:
+        NewsWithSentimentResponse with articles and sentiment analysis
+    """
+    try:
+        logger.info(f"Fetching news with sentiment for {symbol} (limit: {limit})")
+        
+        # Get articles
+        articles = get_stock_news(symbol=symbol, use_cache=True, limit=limit)
+        
+        if not articles:
+            logger.warning(f"No news found for {symbol}")
+            return NewsWithSentimentResponse(
+                articles=[],
+                sentiment_analysis=SentimentInsight(
+                    sentiment_score=0.5,
+                    sentiment_label="NEUTRAL",
+                    recommendation="No news available for analysis",
+                    confidence=0.0,
+                    analysis_count=0,
+                ),
+                count=0,
+            )
+        
+        # Analyze sentiment
+        sentiment_summary = get_sentiment_summary(articles)
+        
+        # Build response articles with sentiment
+        response_articles = [
+            ArticleWithSentiment(
+                title=article["title"],
+                source=article["source"],
+                url=article["url"],
+                summary=article.get("summary"),
+                image=article.get("image"),
+                published_at=article.get("published_at"),
+                sentiment=sentiment_summary["articles"][idx]["sentiment"],
+                sentiment_score=sentiment_summary["articles"][idx]["sentiment_score"],
+                sentiment_confidence=sentiment_summary["articles"][idx]["sentiment_confidence"],
+            )
+            for idx, article in enumerate(articles)
+        ]
+        
+        logger.info(
+            f"Successfully analyzed {len(response_articles)} articles for {symbol}. "
+            f"Overall sentiment: {sentiment_summary['sentiment_label']}"
+        )
+        
+        return NewsWithSentimentResponse(
+            articles=response_articles,
+            sentiment_analysis=SentimentInsight(
+                sentiment_score=sentiment_summary["sentiment_score"],
+                sentiment_label=sentiment_summary["sentiment_label"],
+                recommendation=sentiment_summary["recommendation"],
+                confidence=sentiment_summary["confidence"],
+                analysis_count=sentiment_summary["analysis_count"],
+            ),
+            count=len(response_articles),
+        )
+    
+    except ValidationError as e:
+        logger.warning(f"Validation error for symbol {symbol}: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    
+    except Exception as e:
+        logger.error(f"Error analyzing sentiment for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to analyze sentiment")
+
+
+# ============================================
+# Manual Sentiment Analysis Endpoint
+# ============================================
+@router.post(
+    "/sentiment/analyze",
+    response_model=SentimentInsight,
+    summary="Analyze sentiment of articles",
+    description="Analyze sentiment and generate investment insight from a list of articles.",
+)
+async def analyze_sentiment_endpoint(
+    request: AnalyzeSentimentRequest,
+    current_user: User = Depends(get_current_user),
+) -> SentimentInsight:
+    """
+    Analyze sentiment of provided articles and generate investment insight.
+    
+    This endpoint allows you to submit articles for sentiment analysis without
+    needing to fetch them from our API first.
+    
+    Args:
+        request: List of articles with title and optional summary
+    
+    Returns:
+        SentimentInsight with overall sentiment and recommendation
+    """
+    try:
+        if not request.articles:
+            raise ValidationError(
+                message="Articles list cannot be empty",
+                details={"articles": []}
+            )
+        
+        logger.info(f"Analyzing sentiment for {len(request.articles)} articles")
+        
+        # Analyze articles
+        analyzed = analyze_articles(request.articles)
+        
+        # Generate insight
+        insight = generate_insight(analyzed)
+        
+        logger.info(f"Sentiment analysis complete. Label: {insight.sentiment_label}")
+        
+        return SentimentInsight(
+            sentiment_score=insight.sentiment_score,
+            sentiment_label=insight.sentiment_label,
+            recommendation=insight.recommendation,
+            confidence=insight.confidence,
+            analysis_count=insight.analysis_count,
+        )
+    
+    except ValidationError as e:
+        logger.warning(f"Validation error in sentiment analysis: {e.message}")
+        raise HTTPException(status_code=400, detail=e.message)
+    
+    except Exception as e:
+        logger.error(f"Error analyzing sentiment: {e}")
+        raise HTTPException(status_code=500, detail="Failed to analyze sentiment")
+
+
+# ============================================
+# Cache Management Endpoint
+# ============================================
+@router.post(
+    "/cache/clear",
+    summary="Clear news cache",
+    description="Clear cached news for a symbol or all caches.",
+)
+async def clear_news_cache(
+    symbol: Optional[str] = Query(
+        None,
+        description="Stock symbol to clear cache for. If not provided, clears all cache.",
+    ),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, str]:
+    """
+    Clear news cache.
+    
+    Args:
+        symbol: Optional stock symbol. If provided, only clears cache for that symbol.
+                If not provided, clears all news caches.
+    
+    Returns:
+        Status message
+    """
+    try:
+        if symbol:
+            clear_cache(symbol=symbol)
+            logger.info(f"Cleared news cache for {symbol}")
+            return {"message": f"Cache cleared for {symbol}"}
+        else:
+            clear_cache()
+            logger.info("Cleared all news caches")
+            return {"message": "All news caches cleared"}
+    
+    except Exception as e:
+        logger.error(f"Error clearing cache: {e}")
+        raise HTTPException(status_code=500, detail="Failed to clear cache")
 

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Stock Sentinel | NVIDIA Corp Detail</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;family=Roboto+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container": "#201f22",
+                        "secondary-fixed-dim": "#4edea3",
+                        "on-primary-container": "#00285d",
+                        "on-tertiary": "#68000a",
+                        "surface-container-high": "#2a2a2c",
+                        "outline": "#8c909f",
+                        "surface-dim": "#131315",
+                        "inverse-surface": "#e5e1e4",
+                        "secondary-fixed": "#6ffbbe",
+                        "on-secondary-container": "#00311f",
+                        "on-surface": "#e5e1e4",
+                        "inverse-on-surface": "#313032",
+                        "on-tertiary-fixed-variant": "#930013",
+                        "surface-container-highest": "#353437",
+                        "tertiary-fixed-dim": "#ffb3ad",
+                        "tertiary": "#ffb3ad",
+                        "tertiary-fixed": "#ffdad7",
+                        "on-secondary-fixed": "#002113",
+                        "on-error-container": "#ffdad6",
+                        "surface-bright": "#39393b",
+                        "surface": "#131315",
+                        "inverse-primary": "#005ac2",
+                        "error-container": "#93000a",
+                        "on-background": "#e5e1e4",
+                        "on-tertiary-fixed": "#410004",
+                        "secondary": "#4edea3",
+                        "on-primary-fixed-variant": "#004395",
+                        "surface-variant": "#353437",
+                        "on-surface-variant": "#c2c6d6",
+                        "on-primary-fixed": "#001a42",
+                        "tertiary-container": "#ff5451",
+                        "background": "#131315",
+                        "primary-container": "#4d8eff",
+                        "on-primary": "#002e6a",
+                        "primary": "#adc6ff",
+                        "error": "#ffb4ab",
+                        "surface-container-low": "#1c1b1d",
+                        "on-tertiary-container": "#5c0008",
+                        "on-secondary-fixed-variant": "#005236",
+                        "outline-variant": "#424754",
+                        "primary-fixed-dim": "#adc6ff",
+                        "surface-tint": "#adc6ff",
+                        "primary-fixed": "#d8e2ff",
+                        "surface-container-lowest": "#0e0e10",
+                        "on-secondary": "#003824",
+                        "on-error": "#690005",
+                        "secondary-container": "#00a572"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "mono": ["Roboto Mono"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'Roboto Mono', monospace; }
+        .glass { backdrop-filter: blur(12px); }
+        .radial-gradient-surface {
+            background: radial-gradient(circle at top right, rgba(173, 198, 255, 0.05), transparent 40%);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface selection:bg-primary/30">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 w-full flex items-center justify-between px-6 h-16 bg-[#131315]/80 backdrop-blur-xl border-b border-white/5 z-50 shadow-[0_40px_40px_-15px_rgba(0,0,0,0.4)]">
+<div class="flex items-center gap-8">
+<div class="text-xl font-black tracking-tighter text-white uppercase">Stock Sentinel</div>
+<div class="hidden md:flex items-center bg-surface-container-lowest px-4 py-1.5 rounded-lg border border-outline-variant/15">
+<span class="material-symbols-outlined text-on-surface-variant text-sm mr-2">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-64 text-on-surface" placeholder="Search markets..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary px-5 py-2 rounded-xl font-semibold text-sm cursor-pointer active:scale-95 transition-all">Quick Trade</button>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-white transition-colors">account_circle</span>
+</div>
+</header>
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 bg-[#1c1b1d] py-8 z-40">
+<div class="px-6 mb-10 mt-12">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary">shield_with_heart</span>
+</div>
+<div>
+<div class="text-white font-bold text-sm">The Sentinel</div>
+<div class="text-on-surface-variant text-xs">Pro Tier</div>
+</div>
+</div>
+</div>
+<div class="flex-1 px-4 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 rounded-lg group" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-white font-bold bg-[#39393b] border-r-2 border-[#adc6ff] transition-all duration-300 rounded-lg group" href="#">
+<span class="material-symbols-outlined">show_chart</span>
+<span class="text-sm font-medium">Stocks</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 rounded-lg group" href="#">
+<span class="material-symbols-outlined">pie_chart</span>
+<span class="text-sm font-medium">Portfolio</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 rounded-lg group" href="#">
+<span class="material-symbols-outlined">list_alt</span>
+<span class="text-sm font-medium">Watchlist</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 rounded-lg group" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="text-sm font-medium">Trade History</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 rounded-lg group" href="#">
+<span class="material-symbols-outlined">notifications_active</span>
+<span class="text-sm font-medium">Alerts</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 rounded-lg group" href="#">
+<span class="material-symbols-outlined">article</span>
+<span class="text-sm font-medium">News</span>
+</a>
+</div>
+<div class="px-4 mt-auto space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 rounded-lg" href="#">
+<span class="material-symbols-outlined text-[20px]">help_outline</span>
+<span class="text-sm font-medium">Support</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 rounded-lg" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="md:ml-64 pt-16 min-h-screen radial-gradient-surface">
+<div class="max-w-7xl mx-auto p-6 lg:p-10 space-y-8">
+<!-- Stock Header Section -->
+<section class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+<div class="space-y-1">
+<div class="flex items-center gap-3">
+<span class="bg-surface-container-high text-primary text-[10px] font-black uppercase px-2 py-0.5 rounded tracking-widest">Nasdaq</span>
+<h1 class="text-on-surface-variant font-medium text-sm tracking-wide">NVIDIA Corp</h1>
+</div>
+<div class="flex items-baseline gap-4">
+<span class="text-5xl font-extrabold tracking-tighter text-white">NVDA</span>
+<div class="flex flex-col">
+<span class="mono text-3xl font-bold text-white leading-none">$123.45</span>
+<span class="mono text-secondary text-sm font-semibold mt-1">+$5.01 (+4.23%)</span>
+</div>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container-high rounded-xl text-on-surface-variant hover:text-white transition-colors border border-outline-variant/10">
+<span class="material-symbols-outlined text-lg">add</span> Watchlist
+                    </button>
+<button class="flex items-center gap-2 px-6 py-2 bg-gradient-to-br from-primary to-primary-container text-on-primary rounded-xl font-bold transition-transform active:scale-95">
+                        Trade Now
+                    </button>
+</div>
+</section>
+<!-- Main Interactive Chart Grid (Bento Style) -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Main Chart Card -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-low/50 glass rounded-3xl p-6 border border-outline-variant/5 shadow-2xl">
+<div class="flex items-center justify-between mb-8">
+<div class="flex gap-2 bg-surface-container-lowest p-1 rounded-xl">
+<button class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-surface-bright text-white shadow-sm">1D</button>
+<button class="px-4 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-white transition-all">1W</button>
+<button class="px-4 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-white transition-all">1M</button>
+<button class="px-4 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-white transition-all">1Y</button>
+<button class="px-4 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-white transition-all">ALL</button>
+</div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="label-md font-mono text-[10px]">PRICE</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant">
+<div class="w-2 h-2 rounded-full bg-secondary/50"></div>
+<span class="label-md font-mono text-[10px]">VOLUME</span>
+</div>
+</div>
+</div>
+<!-- Placeholder for Chart (SVG Sparkline style) -->
+<div class="relative h-[400px] w-full mt-4 flex items-end">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 1000 400">
+<defs>
+<lineargradient id="chartGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#4edea3" stop-opacity="0.15"></stop>
+<stop offset="100%" stop-color="#4edea3" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,350 L100,340 L200,360 L300,310 L400,320 L500,280 L600,250 L700,230 L800,180 L900,150 L1000,120" fill="none" stroke="#4edea3" stroke-linejoin="round" stroke-width="3"></path>
+<path d="M0,350 L100,340 L200,360 L300,310 L400,320 L500,280 L600,250 L700,230 L800,180 L900,150 L1000,120 L1000,400 L0,400 Z" fill="url(#chartGradient)"></path>
+</svg>
+<!-- Grid Lines -->
+<div class="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-10">
+<div class="border-t border-white w-full"></div>
+<div class="border-t border-white w-full"></div>
+<div class="border-t border-white w-full"></div>
+<div class="border-t border-white w-full"></div>
+<div class="border-t border-white w-full"></div>
+</div>
+</div>
+</div>
+<!-- Indicators & Technicals -->
+<div class="col-span-12 lg:col-span-4 space-y-6">
+<!-- RSI Gauge -->
+<div class="bg-surface-container-low/50 glass rounded-3xl p-6 border border-outline-variant/5">
+<h3 class="text-on-surface-variant text-xs font-bold tracking-widest uppercase mb-6">Market Momentum (RSI)</h3>
+<div class="relative flex flex-col items-center">
+<div class="relative w-48 h-24 overflow-hidden">
+<div class="absolute inset-0 w-48 h-48 rounded-full border-[12px] border-surface-container-highest"></div>
+<div class="absolute inset-0 w-48 h-48 rounded-full border-[12px] border-secondary border-b-transparent border-l-transparent transform rotate-[45deg]"></div>
+<div class="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-4 h-4 bg-white rounded-full z-10 shadow-lg"></div>
+</div>
+<div class="mt-4 flex flex-col items-center">
+<span class="mono text-3xl font-bold text-white">68.4</span>
+<span class="text-secondary text-[10px] font-black uppercase tracking-widest">Bullish Bias</span>
+</div>
+</div>
+<div class="mt-6 space-y-3">
+<div class="flex justify-between items-center py-2 border-b border-white/5">
+<span class="text-on-surface-variant text-sm">SMA (50)</span>
+<span class="mono text-white text-sm">$118.22</span>
+</div>
+<div class="flex justify-between items-center py-2">
+<span class="text-on-surface-variant text-sm">EMA (200)</span>
+<span class="mono text-white text-sm">$102.45</span>
+</div>
+</div>
+</div>
+<!-- AI Insights Card -->
+<div class="bg-gradient-to-br from-surface-container-high to-surface-container-low glass rounded-3xl p-6 border border-primary/20 relative overflow-hidden group">
+<div class="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-8xl text-primary" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<h3 class="text-primary font-bold text-sm tracking-tight">Sentinel AI Insights</h3>
+</div>
+<p class="text-on-surface-variant text-sm leading-relaxed italic">
+                            "NVIDIA continues to dominate the H100 supply chain. Recent quarterly earnings reflect a 25% increase in data-center revenue. Technical indicators suggest a slight overbought condition in the short term, but long-term momentum remains aggressive."
+                        </p>
+<button class="mt-4 text-primary text-xs font-bold hover:underline">Read full analysis →</button>
+</div>
+</div>
+<!-- Bottom Row Bento -->
+<!-- Related News -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-low/50 glass rounded-3xl p-8 border border-outline-variant/5">
+<div class="flex items-center justify-between mb-8">
+<h2 class="text-white font-bold text-xl">Market Intel</h2>
+<span class="text-on-surface-variant text-xs font-medium cursor-pointer hover:text-primary transition-colors">View All Coverage</span>
+</div>
+<div class="space-y-6">
+<div class="group flex gap-6 cursor-pointer">
+<div class="w-32 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" data-alt="Close-up of high-end circuit boards and GPU cooling systems with blue neon highlights in a dark environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBf7hYPSHQvS3brzC_YvcveqPNz13SO6SFJjxt4Rpcacsf372mfM8W4gqpA_yuhHgi0rw6k4_iKWPa9Cxd8eoASDIApYFDtlnxdO2t5scVC3pykSoHl2vEsNhkmBNdCqnAyy7c9qzmh9pkvmn48RZ1Ax45H5j7MXXi1xG6tHBPcB6ZjoIODTe4ciMgXaICZloeWYwfai_6vRkpY2IIQU1zYSrIPMJLM3ZO8p-R1MQwkXaDC3UvyO8yblvcMVUsmQBvW9OW7n0diDG4"/>
+</div>
+<div class="flex-1">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-[10px] font-black text-primary uppercase tracking-tighter">Technology</span>
+<span class="text-[10px] text-on-surface-variant">• 2h ago</span>
+</div>
+<h4 class="text-white font-semibold text-lg group-hover:text-primary transition-colors line-clamp-1">How NVDA's Next-Gen Blackwell Architecture is Redefining AI Workloads</h4>
+<p class="text-on-surface-variant text-sm line-clamp-1 mt-1">Analysts predict a surge in institutional demand as cloud providers ramp up infrastructure spending...</p>
+</div>
+</div>
+<div class="group flex gap-6 cursor-pointer">
+<div class="w-32 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" data-alt="Stock market trading data screens reflecting in a glass window at night with city lights blurred in background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAlOa-zQHymrw3S_xxqi8D7XBoZgCYuEv-RFCTAg0Gp_yq9Ffr1ssS3yGaZV1MRiSX9JYosID8vj6Y2mSTh70pphjLIp3yQUI9W3QQmQE1C5Ta19cQSPwjdad47zIw8JvIg7KXXYWrKXG78A38R0yd8duVPAQQ8FcJo8XNz5SkgW0GuMokCiIRtLf80Kb_vyWPmfv5mTveRfFWJmKIv6GHQ4-cG1Q28VShV6smxk-5s-wolrmg00LTtakjddb9EJh3JxjZV5lTDU3A"/>
+</div>
+<div class="flex-1">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-[10px] font-black text-secondary uppercase tracking-tighter">Markets</span>
+<span class="text-[10px] text-on-surface-variant">• 5h ago</span>
+</div>
+<h4 class="text-white font-semibold text-lg group-hover:text-primary transition-colors line-clamp-1">The Semiconductor Rally: Why Investors are Flocking to the Top 5 Chipmakers</h4>
+<p class="text-on-surface-variant text-sm line-clamp-1 mt-1">NVIDIA leads the charge as the Philadelphia Semiconductor Index hits a new yearly high...</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Stats Grid (Editorial Data Density) -->
+<div class="col-span-12 lg:col-span-4 bg-surface-container-low/30 glass rounded-3xl p-8 border border-outline-variant/5">
+<h2 class="text-white font-bold text-xl mb-8">Stock Vitals</h2>
+<div class="grid grid-cols-2 gap-y-8 gap-x-6">
+<div>
+<span class="label-md block text-on-surface-variant mb-1 uppercase tracking-widest text-[9px] font-black">Market Cap</span>
+<span class="mono text-white text-lg font-bold">3.04T</span>
+</div>
+<div>
+<span class="label-md block text-on-surface-variant mb-1 uppercase tracking-widest text-[9px] font-black">P/E Ratio</span>
+<span class="mono text-white text-lg font-bold">72.41</span>
+</div>
+<div>
+<span class="label-md block text-on-surface-variant mb-1 uppercase tracking-widest text-[9px] font-black">Dividend Yield</span>
+<span class="mono text-white text-lg font-bold">0.02%</span>
+</div>
+<div>
+<span class="label-md block text-on-surface-variant mb-1 uppercase tracking-widest text-[9px] font-black">52W High</span>
+<span class="mono text-white text-lg font-bold">$140.76</span>
+</div>
+<div>
+<span class="label-md block text-on-surface-variant mb-1 uppercase tracking-widest text-[9px] font-black">52W Low</span>
+<span class="mono text-white text-lg font-bold">$39.23</span>
+</div>
+<div>
+<span class="label-md block text-on-surface-variant mb-1 uppercase tracking-widest text-[9px] font-black">Avg Volume</span>
+<span class="mono text-white text-lg font-bold">342.1M</span>
+</div>
+</div>
+<div class="mt-10 p-4 rounded-2xl bg-surface-container-highest/20 border border-white/5">
+<div class="flex justify-between items-center mb-2">
+<span class="text-xs text-on-surface-variant font-bold">Analyst Rating</span>
+<span class="text-xs text-secondary font-bold">Strong Buy</span>
+</div>
+<div class="h-2 w-full bg-surface-container-high rounded-full overflow-hidden flex">
+<div class="h-full bg-secondary w-3/4"></div>
+<div class="h-full bg-primary/40 w-1/5"></div>
+<div class="h-full bg-error/40 w-[5%]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full bg-[#1c1b1d] border-t border-white/5 flex justify-around py-3 px-2 z-50">
+<button class="flex flex-col items-center gap-1 text-[#c2c6d6]">
+<span class="material-symbols-outlined text-2xl">dashboard</span>
+<span class="text-[10px]">Dashboard</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-white font-bold">
+<span class="material-symbols-outlined text-2xl">show_chart</span>
+<span class="text-[10px]">Stocks</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-[#c2c6d6]">
+<span class="material-symbols-outlined text-2xl">pie_chart</span>
+<span class="text-[10px]">Portfolio</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-[#c2c6d6]">
+<span class="material-symbols-outlined text-2xl">notifications_active</span>
+<span class="text-[10px]">Alerts</span>
+</button>
+</nav>
+</body></html>

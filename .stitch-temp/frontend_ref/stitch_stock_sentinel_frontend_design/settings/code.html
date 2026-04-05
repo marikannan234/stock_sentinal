@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Settings | Stock Sentinel</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=Roboto+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container": "#201f22",
+                    "secondary-fixed-dim": "#4edea3",
+                    "on-primary-container": "#00285d",
+                    "on-tertiary": "#68000a",
+                    "surface-container-high": "#2a2a2c",
+                    "outline": "#8c909f",
+                    "surface-dim": "#131315",
+                    "inverse-surface": "#e5e1e4",
+                    "secondary-fixed": "#6ffbbe",
+                    "on-secondary-container": "#00311f",
+                    "on-surface": "#e5e1e4",
+                    "inverse-on-surface": "#313032",
+                    "on-tertiary-fixed-variant": "#930013",
+                    "surface-container-highest": "#353437",
+                    "tertiary-fixed-dim": "#ffb3ad",
+                    "tertiary": "#ffb3ad",
+                    "tertiary-fixed": "#ffdad7",
+                    "on-secondary-fixed": "#002113",
+                    "on-error-container": "#ffdad6",
+                    "surface-bright": "#39393b",
+                    "surface": "#131315",
+                    "inverse-primary": "#005ac2",
+                    "error-container": "#93000a",
+                    "on-background": "#e5e1e4",
+                    "on-tertiary-fixed": "#410004",
+                    "secondary": "#4edea3",
+                    "on-primary-fixed-variant": "#004395",
+                    "surface-variant": "#353437",
+                    "on-surface-variant": "#c2c6d6",
+                    "on-primary-fixed": "#001a42",
+                    "tertiary-container": "#ff5451",
+                    "background": "#131315",
+                    "primary-container": "#4d8eff",
+                    "on-primary": "#002e6a",
+                    "primary": "#adc6ff",
+                    "error": "#ffb4ab",
+                    "surface-container-low": "#1c1b1d",
+                    "on-tertiary-container": "#5c0008",
+                    "on-secondary-fixed-variant": "#005236",
+                    "outline-variant": "#424754",
+                    "primary-fixed-dim": "#adc6ff",
+                    "surface-tint": "#adc6ff",
+                    "primary-fixed": "#d8e2ff",
+                    "surface-container-lowest": "#0e0e10",
+                    "on-secondary": "#003824",
+                    "on-error": "#690005",
+                    "secondary-container": "#00a572"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Inter"],
+                    "body": ["Inter"],
+                    "label": ["Inter"],
+                    "mono": ["Roboto Mono"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(53, 52, 55, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary selection:text-on-primary">
+<!-- TopNavBar Shell -->
+<nav class="fixed top-0 left-0 w-full flex items-center justify-between px-6 h-16 bg-[#131315]/80 backdrop-blur-xl z-50 border-b border-white/5 shadow-[0_40px_40px_-15px_rgba(0,0,0,0.4)]">
+<div class="flex items-center gap-8">
+<span class="text-xl font-black tracking-tighter text-white uppercase font-headline">Stock Sentinel</span>
+<div class="hidden md:flex items-center bg-surface-container-lowest px-4 py-1.5 rounded-lg border border-outline-variant/15">
+<span class="material-symbols-outlined text-on-surface-variant text-sm mr-2">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm text-on-surface placeholder-on-surface-variant w-64" placeholder="Search markets..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary px-5 py-2 rounded-xl text-sm font-semibold tracking-tight cursor-pointer active:scale-95 transition-all">
+                Quick Trade
+            </button>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-white transition-colors duration-200">account_circle</span>
+</div>
+</nav>
+<!-- SideNavBar Shell -->
+<aside class="hidden md:flex h-screen w-64 fixed left-0 top-0 bg-[#1c1b1d] flex-col py-8 z-40">
+<div class="px-6 mb-10 flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary" style="font-variation-settings: 'FILL' 1;">security</span>
+</div>
+<div>
+<p class="text-white font-bold tracking-tight text-sm">The Sentinel</p>
+<p class="text-on-surface-variant text-xs">Pro Tier</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center px-6 py-3 gap-4 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 hover:translate-x-1 font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center px-6 py-3 gap-4 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 hover:translate-x-1 font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">show_chart</span>
+                Stocks
+            </a>
+<a class="flex items-center px-6 py-3 gap-4 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 hover:translate-x-1 font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">pie_chart</span>
+                Portfolio
+            </a>
+<a class="flex items-center px-6 py-3 gap-4 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 hover:translate-x-1 font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">list_alt</span>
+                Watchlist
+            </a>
+<a class="flex items-center px-6 py-3 gap-4 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 hover:translate-x-1 font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">history</span>
+                Trade History
+            </a>
+<a class="flex items-center px-6 py-3 gap-4 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 hover:translate-x-1 font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">notifications_active</span>
+                Alerts
+            </a>
+<a class="flex items-center px-6 py-3 gap-4 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 hover:translate-x-1 font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">article</span>
+                News
+            </a>
+<a class="flex items-center px-6 py-3 gap-4 text-[#c2c6d6] hover:bg-[#2a2a2c] hover:text-white transition-all duration-300 hover:translate-x-1 font-['Inter'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">help_outline</span>
+                Support
+            </a>
+<!-- Active State -->
+<a class="flex items-center px-6 py-3 gap-4 text-white font-bold bg-[#39393b] border-r-2 border-[#adc6ff] font-['Inter'] text-sm transition-all duration-300" href="#">
+<span class="material-symbols-outlined">settings</span>
+                Settings
+            </a>
+</nav>
+<div class="px-6 mt-auto">
+<div class="glass-panel p-4 rounded-xl border border-white/5">
+<p class="text-xs text-on-surface-variant mb-2">Market Status</p>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(78,222,163,0.5)]"></span>
+<span class="text-xs font-mono text-white">NYSE OPEN</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="md:ml-64 pt-16 min-h-screen">
+<div class="max-w-5xl mx-auto p-8 lg:p-12">
+<!-- Header Section -->
+<header class="mb-12">
+<h1 class="text-4xl font-black tracking-tight text-white font-headline mb-2">Settings</h1>
+<p class="text-on-surface-variant label-md">Configure your Sentinel cockpit and security preferences.</p>
+</header>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- General Preferences -->
+<div class="lg:col-span-8 space-y-6">
+<section class="glass-panel p-8 rounded-xl border border-outline-variant/10">
+<div class="flex items-center gap-3 mb-8">
+<span class="material-symbols-outlined text-primary">tune</span>
+<h2 class="text-xl font-bold text-white tracking-tight">General Preferences</h2>
+</div>
+<div class="space-y-8">
+<!-- Dark Mode Toggle -->
+<div class="flex items-center justify-between group">
+<div>
+<h3 class="text-on-surface font-semibold">Dark Mode</h3>
+<p class="text-sm text-on-surface-variant">Switch between obsidian and light themes.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="h-px bg-white/5"></div>
+<!-- Preferred Currency -->
+<div class="flex items-center justify-between group">
+<div>
+<h3 class="text-on-surface font-semibold">Preferred Currency</h3>
+<p class="text-sm text-on-surface-variant">Set the default currency for valuation.</p>
+</div>
+<div class="relative">
+<select class="appearance-none bg-surface-container-lowest text-on-surface text-sm border border-outline-variant/15 rounded-lg px-4 py-2 pr-10 focus:outline-none focus:border-primary transition-colors cursor-pointer">
+<option>USD ($) — US Dollar</option>
+<option>EUR (€) — Euro</option>
+<option>GBP (£) — British Pound</option>
+<option>JPY (¥) — Japanese Yen</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-2 pointer-events-none text-on-surface-variant">expand_more</span>
+</div>
+</div>
+</div>
+</section>
+<section class="glass-panel p-8 rounded-xl border border-outline-variant/10">
+<div class="flex items-center gap-3 mb-8">
+<span class="material-symbols-outlined text-primary">notifications</span>
+<h2 class="text-xl font-bold text-white tracking-tight">Notification Channels</h2>
+</div>
+<div class="space-y-8">
+<!-- Email Notifications -->
+<div class="flex items-center justify-between group">
+<div>
+<h3 class="text-on-surface font-semibold">Email Notifications</h3>
+<p class="text-sm text-on-surface-variant">Receive weekly reports and market shifts via email.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="h-px bg-white/5"></div>
+<!-- Push Notifications -->
+<div class="flex items-center justify-between group">
+<div>
+<h3 class="text-on-surface font-semibold">Real-time Push Alerts</h3>
+<p class="text-sm text-on-surface-variant">Instant desktop notifications for price triggers.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+</section>
+</div>
+<!-- Security Sidebar -->
+<div class="lg:col-span-4 space-y-6">
+<section class="bg-surface-container-high p-8 rounded-xl border border-primary/10 relative overflow-hidden">
+<!-- Decorative glow -->
+<div class="absolute -top-12 -right-12 w-32 h-32 bg-primary/10 blur-[60px] rounded-full"></div>
+<div class="flex items-center gap-3 mb-6 relative z-10">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+<h2 class="text-lg font-bold text-white tracking-tight">Sentinel Guard</h2>
+</div>
+<div class="space-y-6 relative z-10">
+<div class="p-4 bg-surface-container-lowest rounded-xl border border-outline-variant/15">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-sm font-semibold text-on-surface">Two-Factor Auth</h3>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-secondary/10 text-secondary uppercase tracking-widest">Enabled</span>
+</div>
+<p class="text-xs text-on-surface-variant mb-4">Your account is secured with biometric and authenticator app verification.</p>
+<button class="w-full py-2 bg-surface-container-high border border-outline-variant/20 hover:border-primary/50 text-on-surface text-xs font-medium rounded-lg transition-all">
+                                    Manage Security Keys
+                                </button>
+</div>
+<div class="p-4 bg-surface-container-lowest rounded-xl border border-outline-variant/15">
+<h3 class="text-sm font-semibold text-on-surface mb-2">Connected Devices</h3>
+<div class="flex items-center gap-3 mb-3">
+<span class="material-symbols-outlined text-on-surface-variant text-lg">laptop_mac</span>
+<div>
+<p class="text-xs text-on-surface">MacBook Pro M2</p>
+<p class="text-[10px] text-on-surface-variant font-mono">San Francisco, USA • Active now</p>
+</div>
+</div>
+<button class="text-primary text-[10px] font-bold uppercase tracking-widest hover:text-white transition-colors">See all sessions</button>
+</div>
+</div>
+</section>
+<!-- Danger Zone Card -->
+<section class="glass-panel p-8 rounded-xl border border-error/20">
+<div class="flex items-center gap-3 mb-4">
+<span class="material-symbols-outlined text-error">warning</span>
+<h2 class="text-lg font-bold text-white tracking-tight">Danger Zone</h2>
+</div>
+<p class="text-xs text-on-surface-variant mb-6">Permanently delete your Sentinel account and all trade history. This action cannot be undone.</p>
+<button class="w-full py-2 bg-transparent border border-error/30 hover:bg-error/10 text-error text-xs font-bold uppercase tracking-widest rounded-lg transition-all">
+                            Deactivate Account
+                        </button>
+</section>
+</div>
+</div>
+<!-- Profile Overview Image Section -->
+<section class="mt-12 grid grid-cols-1 lg:grid-cols-12 gap-6">
+<div class="lg:col-span-12 relative h-48 rounded-2xl overflow-hidden group">
+<img alt="Abstract digital visualization" class="w-full h-full object-cover opacity-40 group-hover:scale-105 transition-transform duration-700" data-alt="Futuristic digital network visualization with flowing glowing lines and particles in deep blue and turquoise neon lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB917I-ud3ERKeerywFzIV0Q-D7qZeMc1Vx7Qovmz0PV8FQBo_ocAN0CgHhZsOdHdQ6dHKFlI-f4UwqAFS8cgSys0CFNK2EqkdnAwCCF_3tLv5ckv35jZ0UUdBUpkOr_76B9GXtvTchAylLCycwRNmsPnkONi9J2AhtLRSMaQEiXWm_pbKYtXjjl_Z6gx4TZkwLZaoTosCd5qg_xeCa38XRtAKa-IxpZcEicQzHYXJMRpt9P3WkGXg4YChEviNWDcfG9lY9LH55_Xk"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface to-transparent"></div>
+<div class="absolute bottom-6 left-8 flex items-center gap-6">
+<div class="w-16 h-16 rounded-full border-4 border-primary shadow-[0_0_20px_rgba(173,198,255,0.3)] overflow-hidden">
+<img alt="User avatar" class="w-full h-full object-cover" data-alt="Professional portrait of a male executive with a confident expression in soft studio lighting with a neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDMOsvzy32T_3ZlB2r-9IOHd9GEdfI8RgJs0oJbbvaytVTefkA32KZfuwGVo3AeaoT1V9g5IUEsbykvLyFII0NscFq2ZyoYEMON-RoIOdy2TILeA0ZpzepE5lkuML_Wh5Sn2X5wVjCeH17sdZyCemBExeoM_6F3pZrPWqbxaZP2B6KePUSLzpsZGJmVaIvWaW4TssfMF7FFNx1AvB4cuFGRd3drYNAJ0S0VXagUjhiUcVbixqPT83dHtkJHpxqcjZkZryMT3Q1N_wA"/>
+</div>
+<div>
+<p class="text-2xl font-black text-white font-headline">Alex Vanguard</p>
+<p class="text-on-surface-variant text-sm font-mono tracking-widest uppercase">Member since Oct 2023</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Footer Action -->
+<div class="fixed bottom-0 left-0 md:left-64 right-0 p-4 bg-surface/80 backdrop-blur-md border-t border-white/5 flex justify-end gap-4 z-30">
+<button class="px-6 py-2 text-on-surface-variant hover:text-white transition-colors text-sm font-medium">Discard Changes</button>
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary px-8 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20">Save Settings</button>
+</div>
+</body></html>

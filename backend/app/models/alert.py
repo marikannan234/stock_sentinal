@@ -33,6 +33,17 @@ class AlertType(str, Enum):
     PERCENTAGE_CHANGE = "percentage_change"   # Percentage change from last price
     VOLUME_SPIKE = "volume_spike"             # Volume exceeds threshold
     CRASH = "crash"                           # Sudden price drop detection
+    SMA_ABOVE = "sma_above"                   # Price above SMA
+    SMA_BELOW = "sma_below"                   # Price below SMA
+    SMA_CROSSOVER = "sma_crossover"           # Price crosses SMA
+    EMA_ABOVE = "ema_above"                   # Price above EMA
+    EMA_BELOW = "ema_below"                   # Price below EMA
+    EMA_CROSSOVER = "ema_crossover"           # Price crosses EMA
+    RSI_OVERBOUGHT = "rsi_overbought"         # RSI > 70
+    RSI_OVERSOLD = "rsi_oversold"             # RSI < 30
+    RSI_CROSSOVER = "rsi_crossover"           # RSI crosses 30/70 thresholds
+    STRONG_BUY_SIGNAL = "strong_buy_signal"   # Combined: Price > SMA, Price > EMA, RSI < 30
+    STRONG_SELL_SIGNAL = "strong_sell_signal" # Combined: Price < SMA, Price < EMA, RSI > 70
     CUSTOM = "custom"                         # Custom rule (placeholder)
 
 
@@ -118,6 +129,37 @@ class Alert(Base):
         Float,
         nullable=True
         # Used to track previous price for percentage change and crash detection
+    )
+    
+    sma_period: Mapped[Optional[int]] = mapped_column(
+        nullable=True
+        # SMA period in days for SMA-based alerts (SMA_ABOVE, SMA_BELOW, SMA_CROSSOVER)
+        # Must be provided for SMA alert types, ignored for others
+    )
+    
+    ema_period: Mapped[Optional[int]] = mapped_column(
+        nullable=True
+        # EMA period in days for EMA-based alerts (EMA_ABOVE, EMA_BELOW, EMA_CROSSOVER)
+        # Also required for combined signal alerts (STRONG_BUY_SIGNAL, STRONG_SELL_SIGNAL)
+    )
+    
+    last_ema: Mapped[Optional[float]] = mapped_column(
+        Float,
+        nullable=True
+        # Used to track previous EMA for EMA crossover detection
+    )
+    
+    rsi_period: Mapped[Optional[int]] = mapped_column(
+        nullable=True
+        # RSI period in days for RSI-based alerts (RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_CROSSOVER)
+        # Also required for combined signal alerts (STRONG_BUY_SIGNAL, STRONG_SELL_SIGNAL)
+        # Must be provided for RSI alert types, ignored for others
+    )
+    
+    last_rsi: Mapped[Optional[float]] = mapped_column(
+        Float,
+        nullable=True
+        # Used to track previous RSI for RSI crossover detection
     )
     
     # ============================================================================

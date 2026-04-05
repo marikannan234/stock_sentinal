@@ -59,3 +59,35 @@ export function Input({ label, error, className, type, showPasswordToggle, disab
   );
 }
 
+type SelectProps = {
+  label?: string;
+  options: { value: string; label: string }[];
+  value?: string;
+  onChange?: (e: { target: { value: string } }) => void;
+  className?: string;
+  error?: string;
+};
+
+export function Select({ label, options, value, onChange, className, error }: SelectProps) {
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      {label && <span className="text-slate-300">{label}</span>}
+      <select
+        value={value}
+        onChange={(e) => onChange?.({ target: { value: e.target.value } })}
+        className={clsx(
+          "w-full rounded-xl border border-slate-700/80 bg-slate-900/60 px-4 py-2.5 text-sm text-slate-100 outline-none transition focus:border-emerald-500/80 focus:ring-2 focus:ring-emerald-500/20",
+          className,
+        )}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      {error && <span className="text-sm text-red-500">{error}</span>}
+    </label>
+  );
+}
+

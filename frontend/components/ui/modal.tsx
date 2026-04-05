@@ -1,17 +1,33 @@
-"use client";
+'use client';
 
-import { ReactNode, useEffect } from "react";
-import clsx from "clsx";
+import { ReactNode, useEffect, useState } from 'react';
+import clsx from 'clsx';
 
-type ModalProps = {
+interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+  closeButton?: boolean;
   className?: string;
-};
+}
 
-export function Modal({ isOpen, onClose, title, children, className }: ModalProps) {
+export function Modal({
+  isOpen,
+  onClose,
+  title,
+  children,
+  size = 'md',
+  closeButton = true,
+  className,
+}: ModalProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();

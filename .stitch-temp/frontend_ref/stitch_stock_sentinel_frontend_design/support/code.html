@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Support | Stock Sentinel</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;family=Roboto+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container": "#201f22",
+                        "secondary-fixed-dim": "#4edea3",
+                        "on-primary-container": "#00285d",
+                        "on-tertiary": "#68000a",
+                        "surface-container-high": "#2a2a2c",
+                        "outline": "#8c909f",
+                        "surface-dim": "#131315",
+                        "inverse-surface": "#e5e1e4",
+                        "secondary-fixed": "#6ffbbe",
+                        "on-secondary-container": "#00311f",
+                        "on-surface": "#e5e1e4",
+                        "inverse-on-surface": "#313032",
+                        "on-tertiary-fixed-variant": "#930013",
+                        "surface-container-highest": "#353437",
+                        "tertiary-fixed-dim": "#ffb3ad",
+                        "tertiary": "#ffb3ad",
+                        "tertiary-fixed": "#ffdad7",
+                        "on-secondary-fixed": "#002113",
+                        "on-error-container": "#ffdad6",
+                        "surface-bright": "#39393b",
+                        "surface": "#131315",
+                        "inverse-primary": "#005ac2",
+                        "error-container": "#93000a",
+                        "on-background": "#e5e1e4",
+                        "on-tertiary-fixed": "#410004",
+                        "secondary": "#4edea3",
+                        "on-primary-fixed-variant": "#004395",
+                        "surface-variant": "#353437",
+                        "on-surface-variant": "#c2c6d6",
+                        "on-primary-fixed": "#001a42",
+                        "tertiary-container": "#ff5451",
+                        "background": "#131315",
+                        "primary-container": "#4d8eff",
+                        "on-primary": "#002e6a",
+                        "primary": "#adc6ff",
+                        "error": "#ffb4ab",
+                        "surface-container-low": "#1c1b1d",
+                        "on-tertiary-container": "#5c0008",
+                        "on-secondary-fixed-variant": "#005236",
+                        "outline-variant": "#424754",
+                        "primary-fixed-dim": "#adc6ff",
+                        "surface-tint": "#adc6ff",
+                        "primary-fixed": "#d8e2ff",
+                        "surface-container-lowest": "#0e0e10",
+                        "on-secondary": "#003824",
+                        "on-error": "#690005",
+                        "secondary-container": "#00a572"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "mono": ["Roboto Mono"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(53, 52, 55, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .primary-gradient {
+            background: linear-gradient(135deg, #adc6ff 0%, #4d8eff 100%);
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #131315; }
+        ::-webkit-scrollbar-thumb { background: #353437; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary/30">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 w-full flex items-center justify-between px-6 h-16 bg-[#131315]/80 backdrop-blur-xl z-50 border-b border-white/5 shadow-[0_40px_40px_-15px_rgba(0,0,0,0.4)]">
+<div class="flex items-center gap-8">
+<span class="text-xl font-black tracking-tighter text-white uppercase">STOCK SENTINEL</span>
+<div class="hidden md:flex items-center gap-6">
+<nav class="flex items-center gap-6 text-sm font-semibold tracking-tight font-['Inter']">
+<span class="text-[#c2c6d6] hover:text-white transition-colors duration-200 cursor-pointer active:scale-95">Market</span>
+<span class="text-[#c2c6d6] hover:text-white transition-colors duration-200 cursor-pointer active:scale-95">Analysis</span>
+<span class="text-[#adc6ff] cursor-pointer">Support</span>
+</nav>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="primary-gradient text-on-primary-container px-4 py-1.5 rounded-lg text-sm font-bold active:scale-95 transition-transform">Quick Trade</button>
+<span class="material-symbols-outlined text-[#adc6ff] cursor-pointer">account_circle</span>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="hidden md:flex h-screen w-64 fixed left-0 top-0 bg-[#1c1b1d] flex-col py-8 z-40 transition-all duration-300">
+<div class="px-6 mb-10 mt-12">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center border border-outline-variant/20">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">shield_person</span>
+</div>
+<div>
+<p class="text-white font-bold text-sm tracking-tight">The Sentinel</p>
+<p class="text-on-surface-variant text-[10px] uppercase tracking-widest font-black">Pro Tier</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1 px-3">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#c2c6d6] hover:text-white hover:bg-[#2a2a2c] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span class="text-sm font-medium font-['Inter']">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#c2c6d6] hover:text-white hover:bg-[#2a2a2c] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined text-[20px]">show_chart</span>
+<span class="text-sm font-medium font-['Inter']">Stocks</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#c2c6d6] hover:text-white hover:bg-[#2a2a2c] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined text-[20px]">pie_chart</span>
+<span class="text-sm font-medium font-['Inter']">Portfolio</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#c2c6d6] hover:text-white hover:bg-[#2a2a2c] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined text-[20px]">list_alt</span>
+<span class="text-sm font-medium font-['Inter']">Watchlist</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#c2c6d6] hover:text-white hover:bg-[#2a2a2c] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined text-[20px]">history</span>
+<span class="text-sm font-medium font-['Inter']">Trade History</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#c2c6d6] hover:text-white hover:bg-[#2a2a2c] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined text-[20px]">notifications_active</span>
+<span class="text-sm font-medium font-['Inter']">Alerts</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#c2c6d6] hover:text-white hover:bg-[#2a2a2c] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined text-[20px]">article</span>
+<span class="text-sm font-medium font-['Inter']">News</span>
+</a>
+<div class="pt-4 mt-4 border-t border-white/5">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-white font-bold bg-[#39393b] border-r-2 border-[#adc6ff] translate-x-1" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">help_outline</span>
+<span class="text-sm font-medium font-['Inter']">Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#c2c6d6] hover:text-white hover:bg-[#2a2a2c] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="text-sm font-medium font-['Inter']">Settings</span>
+</a>
+</div>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="md:ml-64 pt-24 pb-12 px-6 lg:px-12">
+<div class="max-w-6xl mx-auto">
+<!-- Header Section -->
+<div class="mb-12">
+<h1 class="text-4xl md:text-5xl font-black tracking-tighter text-white mb-2">Help Center</h1>
+<p class="text-on-surface-variant max-w-xl">Our sentinels are on standby 24/7. Submit a ticket for technical issues, account inquiries, or trading platform support.</p>
+</div>
+<!-- Bento Grid Support Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<!-- Support Form Card (Bento Item 1) -->
+<div class="lg:col-span-5 bg-surface-container-low rounded-xl overflow-hidden shadow-2xl relative group">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+<div class="p-8 relative z-10">
+<div class="flex items-center gap-3 mb-8">
+<span class="material-symbols-outlined text-primary">contact_support</span>
+<h2 class="text-xl font-bold text-white tracking-tight">Open New Ticket</h2>
+</div>
+<form class="space-y-6">
+<div class="space-y-1.5">
+<label class="text-[10px] uppercase tracking-widest font-black text-on-surface-variant px-1">Inquiry Subject</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant/15 focus:border-primary/100 transition-all rounded-lg px-4 py-3 text-on-surface placeholder:text-on-surface-variant/40 focus:ring-0 outline-none" placeholder="e.g. Portfolio sync latency" type="text"/>
+</div>
+<div class="space-y-1.5">
+<label class="text-[10px] uppercase tracking-widest font-black text-on-surface-variant px-1">Detailed Message</label>
+<textarea class="w-full bg-surface-container-lowest border border-outline-variant/15 focus:border-primary/100 transition-all rounded-lg px-4 py-3 text-on-surface placeholder:text-on-surface-variant/40 focus:ring-0 outline-none resize-none" placeholder="Describe your issue in detail..." rows="6"></textarea>
+</div>
+<div class="flex items-center gap-4 pt-2">
+<button class="primary-gradient text-on-primary-container px-8 py-3 rounded-lg text-sm font-black uppercase tracking-tight active:scale-95 transition-all shadow-lg shadow-primary/20 w-full" type="submit">Submit Ticket</button>
+</div>
+</form>
+</div>
+</div>
+<!-- Previous Tickets Section (Bento Item 2) -->
+<div class="lg:col-span-7 space-y-6">
+<!-- Quick Stats Row -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-high p-6 rounded-xl border-l-2 border-primary/40">
+<p class="text-[10px] uppercase tracking-widest font-black text-on-surface-variant mb-1">Active Tickets</p>
+<p class="text-3xl font-mono text-white font-medium">02</p>
+</div>
+<div class="bg-surface-container-high p-6 rounded-xl border-l-2 border-secondary/40">
+<p class="text-[10px] uppercase tracking-widest font-black text-on-surface-variant mb-1">Resolved</p>
+<p class="text-3xl font-mono text-white font-medium">14</p>
+</div>
+</div>
+<!-- Ticket Table Container -->
+<div class="glass-panel rounded-xl overflow-hidden border border-white/5 shadow-2xl">
+<div class="px-6 py-4 border-b border-white/5 bg-white/5 flex items-center justify-between">
+<h3 class="text-sm font-bold text-white uppercase tracking-widest">History</h3>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="text-[10px] text-on-surface-variant font-bold uppercase">System: Operational</span>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[10px] uppercase tracking-widest font-black text-on-surface-variant bg-surface-container-lowest/50">
+<th class="px-6 py-4">Ticket ID</th>
+<th class="px-6 py-4">Date</th>
+<th class="px-6 py-4">Subject</th>
+<th class="px-6 py-4 text-right">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-white/5">
+<tr class="hover:bg-surface-bright/30 transition-colors group cursor-pointer">
+<td class="px-6 py-5 font-mono text-xs text-primary">#ST-88210</td>
+<td class="px-6 py-5 text-sm text-on-surface-variant">Oct 24, 2023</td>
+<td class="px-6 py-5">
+<p class="text-sm font-semibold text-white">API Key Regeneration Request</p>
+</td>
+<td class="px-6 py-5 text-right">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter bg-secondary-container/20 text-secondary border border-secondary/20">Resolved</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-bright/30 transition-colors group cursor-pointer">
+<td class="px-6 py-5 font-mono text-xs text-primary">#ST-91044</td>
+<td class="px-6 py-5 text-sm text-on-surface-variant">Nov 02, 2023</td>
+<td class="px-6 py-5">
+<p class="text-sm font-semibold text-white">Latency in Nasdaq-100 Feed</p>
+</td>
+<td class="px-6 py-5 text-right">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter bg-primary/10 text-primary border border-primary/20">Open</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-bright/30 transition-colors group cursor-pointer">
+<td class="px-6 py-5 font-mono text-xs text-primary">#ST-91285</td>
+<td class="px-6 py-5 text-sm text-on-surface-variant">Nov 05, 2023</td>
+<td class="px-6 py-5">
+<p class="text-sm font-semibold text-white">Account Upgrade Verification</p>
+</td>
+<td class="px-6 py-5 text-right">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter bg-primary/10 text-primary border border-primary/20">Open</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-bright/30 transition-colors group cursor-pointer">
+<td class="px-6 py-5 font-mono text-xs text-primary">#ST-77120</td>
+<td class="px-6 py-5 text-sm text-on-surface-variant">Sept 18, 2023</td>
+<td class="px-6 py-5">
+<p class="text-sm font-semibold text-white">Margin Trading Eligibility</p>
+</td>
+<td class="px-6 py-5 text-right">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter bg-secondary-container/20 text-secondary border border-secondary/20">Resolved</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-4 bg-surface-container-lowest/30 text-center">
+<button class="text-[10px] font-black uppercase tracking-widest text-primary hover:text-white transition-colors">View All Archive</button>
+</div>
+</div>
+<!-- Documentation Shortcut (Asymmetric Bento) -->
+<div class="bg-surface-container-low p-6 rounded-xl flex items-center justify-between border border-white/5 relative overflow-hidden">
+<div class="relative z-10">
+<h4 class="text-lg font-bold text-white mb-1">Knowledge Base</h4>
+<p class="text-sm text-on-surface-variant">Search our technical documentation first.</p>
+<button class="mt-4 flex items-center gap-2 text-primary text-xs font-black uppercase tracking-widest group">
+                                Browse Docs
+                                <span class="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</button>
+</div>
+<div class="opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-7xl text-white">library_books</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Contact Info -->
+<div class="mt-16 pt-8 border-t border-white/5 grid grid-cols-1 md:grid-cols-3 gap-8">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">mail</span>
+</div>
+<div>
+<p class="text-xs font-black text-on-surface-variant uppercase tracking-widest">Email Support</p>
+<p class="text-sm font-mono text-white">sentinel@stocksentinel.io</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">forum</span>
+</div>
+<div>
+<p class="text-xs font-black text-on-surface-variant uppercase tracking-widest">Live Chat</p>
+<p class="text-sm font-mono text-white">Average wait: 2 mins</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">bolt</span>
+</div>
+<div>
+<p class="text-xs font-black text-on-surface-variant uppercase tracking-widest">Emergency</p>
+<p class="text-sm font-mono text-white">+1 (888) STOCK-SOS</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Visual Polish: Background Ambient Orbs -->
+<div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] pointer-events-none z-[-1]"></div>
+<div class="fixed bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-secondary/5 rounded-full blur-[100px] pointer-events-none z-[-1]"></div>
+</body></html>

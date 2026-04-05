@@ -55,7 +55,7 @@ try:
     print("\n[STEP 2] Creating alert request...")
     alert_request = CreateAlertRequest(
         stock_symbol="AAPL",
-        alert_type="percentage_change",  # This should be converted to AlertType enum
+        alert_type=AlertType.PERCENTAGE_CHANGE,  # Use enum value
         target_value=5.0
     )
     print(f"✓ Request created:")
@@ -115,15 +115,19 @@ try:
     # Step 8: Verify in database
     print("\n[STEP 8] Querying alert from database...")
     db_alert = db.query(Alert).filter(Alert.id == alert.id).first()
-    print(f"✓ Alert found in database:")
-    print(f"  - id: {db_alert.id}")
-    print(f"  - alert_type: {db_alert.alert_type}")
-    print(f"  - alert_type value: {db_alert.alert_type.value if db_alert.alert_type else 'NULL'}")
-
-    if db_alert.alert_type is None:
-        print("\n❌ ERROR: alert_type is NULL in database!")
+    
+    if db_alert is None:
+        print("❌ ERROR: Alert not found in database!")
     else:
-        print("\n✅ SUCCESS: alert_type correctly saved to database!")
+        print(f"✓ Alert found in database:")
+        print(f"  - id: {db_alert.id}")
+        print(f"  - alert_type: {db_alert.alert_type}")
+        print(f"  - alert_type value: {db_alert.alert_type.value if db_alert.alert_type else 'NULL'}")
+
+        if db_alert.alert_type is None:
+            print("\n❌ ERROR: alert_type is NULL in database!")
+        else:
+            print("\n✅ SUCCESS: alert_type correctly saved to database!")
 
 except Exception as e:
     print(f"\n❌ Error during diagnostic test:")

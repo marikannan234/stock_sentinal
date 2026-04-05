@@ -1,0 +1,40 @@
+# Stock Sentinel - Design Document (PRD)
+
+## Project Overview
+Stock Sentinel is a professional-grade stock trading and analysis platform. It leverages a FastAPI/PostgreSQL backend to provide real-time data, technical indicators, and AI-driven sentiment analysis.
+
+## Core User Flows
+1. **Market Overview:** User lands on the Dashboard to see portfolio health, market trends, and top gainers/losers.
+2. **Deep Dive Analysis:** User searches for a stock or clicks the ribbon to view the Stock Detail page, toggling technical indicators (SMA, EMA, RSI) and checking the AI Risk Gauge.
+3. **Portfolio Management:** User reviews holdings, tracks profit/loss via visualizations, and analyzes asset allocation.
+4. **Active Monitoring:** User manages a custom Watchlist and sets up sophisticated price/indicator alerts.
+5. **Information Consumption:** User browses global and stock-specific news with AI sentiment badges.
+
+## Proposed Screen List
+1.  **Dashboard (Main Hub):** Portfolio summary cards, top gainers/losers, recent alerts feed, and a broad market overview chart.
+2.  **Stock Detail Page:** Interactive candlestick chart, indicator toggles, live order book/price, stock-specific news, and the **AI Risk Gauge**.
+3.  **Watchlist Page:** A comprehensive table of tracked stocks with real-time change percentages and a "Most Active" sidebar.
+4.  **Portfolio Page:** Advanced holdings table, P&L visualizations, allocation pie chart, and historical performance graph.
+5.  **Alerts Management:** Interface to create/edit complex alerts (Price, SMA, RSI) and view triggered history.
+6.  **News Terminal:** A dedicated feed for global market news with sector filters and AI sentiment tagging.
+
+## Visual Direction & Brand Identity
+*   **Theme:** Deep Dark Mode (Charcoal/Navy base).
+*   **Style:** Glassmorphism (blurred backgrounds for cards), subtle gradients (Emerald for growth, Rose for loss).
+*   **Typography:** Clean, sans-serif (e.g., Inter or Roboto Mono for data points).
+*   **Interactivity:** Smooth transitions, hover states on table rows, and animated gauges.
+
+## Component Architecture
+*   **Global Layout:** Collapsible Sidebar + Top Bar with Live Stock Ribbon.
+*   **Shared Components:**
+    *   `RiskGauge`: Semi-circle SVG/Canvas component.
+    *   `StockCard`: Quick view card for watchlist/gainers.
+    *   `SentimentBadge`: Bullish/Bearish/Neutral indicator.
+    *   `PriceTicker`: Inline real-time price component with animations.
+    *   `ChartContainer`: Wrapper for interactive technical charts.
+
+## Technical Requirements (Frontend)
+*   React / Next.js (App Router)
+*   Tailwind CSS
+*   Lucide React (Icons)
+*   Recharts or Lightweight Charts (for visualization)

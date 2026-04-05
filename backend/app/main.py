@@ -28,6 +28,7 @@ from app.services.scheduler import start_scheduler, stop_scheduler
 # Then import routes
 from app.api.routes import auth as auth_routes
 from app.api.routes import health as health_routes
+from app.api.routes import indicator as indicator_routes
 from app.api.routes import news as news_routes
 from app.api.routes import portfolio as portfolio_routes
 from app.api.routes import sentiment as sentiment_routes
@@ -35,6 +36,11 @@ from app.api.routes import stock as stock_routes
 from app.api.routes import watchlist as watchlist_routes
 from app.api.routes import search as search_routes
 from app.api.routes import alert as alert_routes
+from app.api.routes import websocket as websocket_routes
+from app.api.routes import user_profile as user_profile_routes
+from app.api.routes import support as support_routes
+from app.api.routes import trading as trading_routes
+from app.api.routes import stocks_extended as stocks_extended_routes
 
 
 # ============================================
@@ -147,13 +153,19 @@ logger.info(f"CORS configured with origins: {cors_origins}")
 # ============================================
 app.include_router(health_routes.router, prefix="/api", tags=["health"])
 app.include_router(auth_routes.router, prefix="/api", tags=["auth"])
+app.include_router(indicator_routes.router, prefix="/api", tags=["indicators"])
 app.include_router(stock_routes.router, prefix="/api", tags=["stock"])
+app.include_router(stocks_extended_routes.router, prefix="/api", tags=["stocks"])
 app.include_router(news_routes.router, prefix="/api", tags=["news"])
 app.include_router(sentiment_routes.router, prefix="/api", tags=["sentiment"])
 app.include_router(watchlist_routes.router, prefix="/api", tags=["watchlist"])
 app.include_router(portfolio_routes.router, prefix="/api", tags=["portfolio"])
 app.include_router(search_routes.router, prefix="/api", tags=["search"])
 app.include_router(alert_routes.router, prefix="/api", tags=["alerts"])
+app.include_router(user_profile_routes.router, prefix="/api", tags=["user"])
+app.include_router(support_routes.router, prefix="/api", tags=["support"])
+app.include_router(trading_routes.router, prefix="/api", tags=["trading"])
+app.include_router(websocket_routes.router, tags=["websocket"])
 
 logger.info(f"All routes registered ({settings.APP_NAME} is ready to serve requests)")
 

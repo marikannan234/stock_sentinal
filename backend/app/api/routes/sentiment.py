@@ -5,12 +5,13 @@ import re
 import threading
 import time
 from typing import List, Literal
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_user
-from app.api.routes.news import _finnhub_company_news
+from app.services.news_service import get_stock_news
 from app.models.user import User
 
 router = APIRouter(prefix="/sentiment", tags=["sentiment"])
@@ -182,13 +183,13 @@ def _normalize_01(score_raw: float) -> float:
 
 
 @router.get("/{ticker}", response_model=SentimentResponse, summary="Get news-based sentiment for ticker")
-def get_ticker_sentiment(
+async def get_ticker_sentiment(
     ticker: str = Path(..., description="Stock ticker symbol (e.g., AAPL, TSLA)", min_length=1, max_length=10),
     _: User = Depends(get_current_user),
 ) -> SentimentResponse:
     """
     Combines:
-    - News fetch (Finnhub company-news)
+    - News fetch (Finnhub company-news via news service)
     - Lightweight rule-based sentiment over article headlines
     Cached per ticker for 10 minutes (in-memory, per process).
     """
@@ -197,26 +198,18 @@ def get_ticker_sentiment(
     if cached is not None:
         return cached
 
-    raw_news = _finnhub_company_news(ticker_upper, limit=10)
+    # Use service layer to get news
+    raw_news = get_stock_news(ticker_upper, limit=10)
     articles: List[SentimentArticle] = []
     raw_scores: List[float] = []
 
     for it in raw_news:
-        title = it.get("headline") or ""
+        title = it.get("title") or ""
         source = it.get("source") or ""
         url = it.get("url") or ""
-        dt = it.get("datetime")
-        if not title or not source or not url or not dt:
+        published_at = it.get("published_at")
+        if not title or not source or not url or not published_at:
             continue
-
-        # published_at in UTC ISO8601
-        try:
-            # Finnhub returns unix seconds
-            from datetime import datetime, timezone
-
-            published_at = datetime.fromtimestamp(int(dt), tz=timezone.utc).isoformat()
-        except Exception:
-            published_at = ""
 
         score_raw = _raw_sentiment_score(str(title))
         raw_scores.append(score_raw)
@@ -226,7 +219,7 @@ def get_ticker_sentiment(
                 title=str(title),
                 source=str(source),
                 url=str(url),
-                published_at=published_at,
+                published_at=str(published_at),
                 sentiment=_to_label(score_raw),
                 score=round(_normalize_01(score_raw), 2),
             )

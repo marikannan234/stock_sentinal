@@ -1,97 +1,100 @@
 "use client";
 
 import { create } from "zustand";
-import { api } from "./api-client";
-
-type User = {
-  email: string;
-  full_name?: string | null;
-};
+import { authService, getErrorMessage } from "./api-service";
+import type { UserProfile } from "./types";
 
 type AuthState = {
-  user: User | null;
+  user: UserProfile | null;
   token: string | null;
   loading: boolean;
   error: string | null;
+  isHydrated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName?: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
   logout: () => void;
   clearError: () => void;
+  hydrate: () => Promise<void>;
 };
 
-export const useAuthStore = create<AuthState>((set) => ({
+const TOKEN_KEY = "stocksentinel_token";
+
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
-  token:
-    typeof window !== "undefined"
-      ? window.localStorage.getItem("stocksentinel_token")
-      : null,
+  token: null,
   loading: false,
   error: null,
+  isHydrated: false,
+
+  async hydrate() {
+    if (typeof window === "undefined") {
+      set({ isHydrated: true });
+      return;
+    }
+
+    const token = window.localStorage.getItem(TOKEN_KEY);
+    set({ token, isHydrated: true });
+
+    if (token) {
+      try {
+        await get().refreshUser();
+      } catch {
+        get().logout();
+      }
+    }
+  },
+
+  async refreshUser() {
+    try {
+      const user = await authService.me();
+      set({ user, error: null });
+    } catch (error) {
+      const message = getErrorMessage(error, "Unable to load your profile.");
+      set({ error: message });
+      throw error;
+    }
+  },
 
   async login(email, password) {
     try {
       set({ loading: true, error: null });
-      const { data } = await api.post("/auth/login-json", { email, password });
+      const { access_token } = await authService.login(email, password);
 
-      const token = data.access_token as string;
       if (typeof window !== "undefined") {
-        window.localStorage.setItem("stocksentinel_token", token);
+        window.localStorage.setItem(TOKEN_KEY, access_token);
       }
 
+      set({ token: access_token });
+      await get().refreshUser();
+      set({ loading: false, error: null });
+    } catch (error) {
       set({
-        token,
-        user: { email },
         loading: false,
-        error: null,
+        error: getErrorMessage(error, "Unable to login. Please try again."),
       });
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string | { msg?: string }[] } }; message?: string };
-      const d = e?.response?.data?.detail;
-      let msg: string;
-      if (d !== undefined && d !== null) {
-        msg = Array.isArray(d)
-          ? d.map((x) => (typeof x === "object" && x?.msg ? x.msg : String(x))).join(", ")
-          : typeof d === "string"
-            ? d
-            : "Unable to login. Please try again.";
-      } else {
-        msg = e?.message === "Network Error"
-          ? "Cannot reach server. Check that the backend is running and CORS is configured."
-          : "Unable to login. Please try again.";
-      }
-      set({ error: msg, loading: false });
+      throw error;
     }
   },
 
   async register(email, password, fullName) {
     try {
       set({ loading: true, error: null });
-      const body: { email: string; password: string; full_name?: string } = { email, password };
-      if (fullName && fullName.trim()) body.full_name = fullName.trim();
-      await api.post("/auth/register", body);
+      await authService.register(email, password, fullName);
+      await get().login(email, password);
       set({ loading: false, error: null });
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string | { msg?: string }[] } }; message?: string };
-      const d = e?.response?.data?.detail;
-      let msg: string;
-      if (d !== undefined && d !== null) {
-        msg = Array.isArray(d)
-          ? d.map((x) => (typeof x === "object" && x?.msg ? x.msg : String(x))).join(", ")
-          : typeof d === "string"
-            ? d
-            : "Unable to register. Please check your details.";
-      } else {
-        msg = e?.message === "Network Error"
-          ? "Cannot reach server. Check that the backend is running and CORS is configured."
-          : "Unable to register. Please check your details.";
-      }
-      set({ error: msg, loading: false });
+    } catch (error) {
+      set({
+        loading: false,
+        error: getErrorMessage(error, "Unable to register. Please check your details."),
+      });
+      throw error;
     }
   },
 
   logout() {
     if (typeof window !== "undefined") {
-      window.localStorage.removeItem("stocksentinel_token");
+      window.localStorage.removeItem(TOKEN_KEY);
     }
     set({ user: null, token: null, error: null });
   },
@@ -100,4 +103,3 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ error: null });
   },
 }));
-

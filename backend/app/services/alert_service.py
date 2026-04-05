@@ -29,6 +29,7 @@ from app.config import settings
 from app.models.alert import Alert, AlertCondition
 from app.models.user import User
 from app.schemas.alert import AlertResponse, CreateAlertRequest, UpdateAlertRequest
+from app.services.indicator_service import calculate_sma, calculate_rsi, calculate_ema
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,13 @@ def send_alert_email_async(
     condition: str,
     target_value: float,
     triggered_at: str,
+    alert_type: str = "price",
+    sma_value: Optional[float] = None,
+    sma_period: Optional[int] = None,
+    ema_value: Optional[float] = None,
+    ema_period: Optional[int] = None,
+    rsi_value: Optional[float] = None,
+    rsi_period: Optional[int] = None,
 ) -> None:
     """
     Send alert triggered email notification asynchronously from sync context.
@@ -59,6 +67,13 @@ def send_alert_email_async(
         condition: Alert condition (e.g., ">", "<")
         target_value: Target price value
         triggered_at: When alert was triggered (ISO format string)
+        alert_type: Type of alert (for SMA/EMA/RSI/combined alerts)
+        sma_value: SMA value (for SMA alerts)
+        sma_period: SMA period (for SMA alerts)
+        ema_value: EMA value (for EMA alerts and combined signals)
+        ema_period: EMA period (for EMA alerts and combined signals)
+        rsi_value: RSI value (for RSI alerts and combined signals)
+        rsi_period: RSI period (for RSI alerts and combined signals)
     """
     try:
         # Try to get existing event loop
@@ -80,6 +95,13 @@ def send_alert_email_async(
             condition=condition,
             target_value=target_value,
             triggered_at=triggered_at,
+            alert_type=alert_type,
+            sma_value=sma_value,
+            sma_period=sma_period,
+            ema_value=ema_value,
+            ema_period=ema_period,
+            rsi_value=rsi_value,
+            rsi_period=rsi_period,
         )
         
         # Try to run using the current loop if it's running
@@ -186,6 +208,15 @@ class AlertService:
             
             condition = request.condition
             
+            # Validate target_value is provided
+            if request.target_value is None:
+                raise InvalidAlertConditionError(
+                    "NONE",
+                    ["target_value is required"],
+                )
+            
+            target_value = request.target_value
+            
             logger.debug(
                 f"Creating alert with normalized values",
                 extra={
@@ -193,7 +224,7 @@ class AlertService:
                     "symbol": request.stock_symbol,
                     "alert_type": alert_type.value,
                     "condition": condition.value if condition else None,
-                    "target_value": request.target_value,
+                    "target_value": target_value,
                 },
             )
             
@@ -220,7 +251,7 @@ class AlertService:
                 Alert.stock_symbol == request.stock_symbol,
                 Alert.alert_type == alert_type,
                 Alert.condition == condition,
-                Alert.target_value == request.target_value,
+                Alert.target_value == target_value,
             ).first()
             
             if existing_alert:
@@ -236,7 +267,7 @@ class AlertService:
                 raise DuplicateAlertError(
                     request.stock_symbol,
                     condition.value if condition else "N/A",
-                    request.target_value,
+                    target_value,
                 )
             
             # Create new alert
@@ -244,7 +275,7 @@ class AlertService:
                 user_id=user.id,
                 stock_symbol=request.stock_symbol,
                 condition=condition,
-                target_value=request.target_value,
+                target_value=target_value,
                 alert_type=alert_type,
                 is_active=True,
                 last_price=None,  # Will be populated on first check
@@ -752,7 +783,17 @@ class AlertService:
 # Standalone Functions for Background Scheduler
 # ============================================================================
 
-def trigger_alert(db: Session, alert: Alert, current_price: float) -> bool:
+def trigger_alert(
+    db: Session,
+    alert: Alert,
+    current_price: float,
+    sma_value: Optional[float] = None,
+    sma_period: Optional[int] = None,
+    ema_value: Optional[float] = None,
+    ema_period: Optional[int] = None,
+    rsi_value: Optional[float] = None,
+    rsi_period: Optional[int] = None,
+) -> bool:
     """
     Trigger an alert by marking it as inactive and setting triggered_at timestamp.
     
@@ -769,6 +810,12 @@ def trigger_alert(db: Session, alert: Alert, current_price: float) -> bool:
         db: Database session
         alert: Alert to trigger
         current_price: Current stock price that matched the condition
+        sma_value: Optional SMA value (for SMA alerts)
+        sma_period: Optional SMA period (for SMA alerts)
+        ema_value: Optional EMA value (for EMA alerts and combined signals)
+        ema_period: Optional EMA period (for EMA alerts and combined signals)
+        rsi_value: Optional RSI value (for RSI alerts and combined signals)
+        rsi_period: Optional RSI period (for RSI alerts and combined signals)
         
     Returns:
         True if alert was triggered successfully, False if already triggered
@@ -823,6 +870,8 @@ def trigger_alert(db: Session, alert: Alert, current_price: float) -> bool:
                 "condition": alert.condition.value if alert.condition else None,
                 "target_value": alert.target_value,
                 "current_price": current_price,
+                "sma_value": sma_value,
+                "sma_period": sma_period,
                 "triggered_at": alert.triggered_at,
                 "history_id": history_entry.id,
             },
@@ -839,6 +888,13 @@ def trigger_alert(db: Session, alert: Alert, current_price: float) -> bool:
                     condition=alert.condition.value if alert.condition else "N/A",
                     target_value=alert.target_value,
                     triggered_at=triggered_at_str,
+                    alert_type=alert.alert_type.value,
+                    sma_value=sma_value,
+                    sma_period=sma_period,
+                    ema_value=ema_value,
+                    ema_period=ema_period,
+                    rsi_value=rsi_value,
+                    rsi_period=rsi_period,
                 )
                 
                 # Update history entry with email sent timestamp
@@ -990,6 +1046,12 @@ def check_all_alerts() -> None:
                         total_checked += 1
                         alert_type = alert.alert_type
                         should_trigger = False
+                        sma_value_for_email = None
+                        sma_period_for_email = None
+                        ema_value_for_email = None
+                        ema_period_for_email = None
+                        rsi_value_for_email = None
+                        rsi_period_for_email = None
                         
                         # Dispatch to appropriate check method based on alert type
                         if alert_type == AlertType.PRICE:
@@ -1011,6 +1073,571 @@ def check_all_alerts() -> None:
                         
                         elif alert_type == AlertType.CRASH:
                             should_trigger = alert.check_alert(current_price)
+                        
+                        elif alert_type == AlertType.SMA_ABOVE:
+                            # Price above SMA
+                            try:
+                                if alert.sma_period is None:
+                                    logger.error(
+                                        f"SMA_ABOVE alert missing sma_period",
+                                        extra={"alert_id": alert.id}
+                                    )
+                                    continue
+                                sma_data = calculate_sma(symbol, alert.sma_period)
+                                sma_value_for_email = sma_data["sma"]
+                                sma_period_for_email = alert.sma_period
+                                should_trigger = current_price > sma_value_for_email
+                                logger.debug(
+                                    f"SMA_ABOVE check",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "current_price": current_price,
+                                        "sma": sma_value_for_email,
+                                        "period": alert.sma_period,
+                                        "should_trigger": should_trigger,
+                                    }
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating SMA for SMA_ABOVE alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
+                        
+                        elif alert_type == AlertType.SMA_BELOW:
+                            # Price below SMA
+                            try:
+                                if alert.sma_period is None:
+                                    logger.error(
+                                        f"SMA_BELOW alert missing sma_period",
+                                        extra={"alert_id": alert.id}
+                                    )
+                                    continue
+                                sma_data = calculate_sma(symbol, alert.sma_period)
+                                sma_value_for_email = sma_data["sma"]
+                                sma_period_for_email = alert.sma_period
+                                should_trigger = current_price < sma_value_for_email
+                                logger.debug(
+                                    f"SMA_BELOW check",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "current_price": current_price,
+                                        "sma": sma_value_for_email,
+                                        "period": alert.sma_period,
+                                        "should_trigger": should_trigger,
+                                    }
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating SMA for SMA_BELOW alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
+                        
+                        elif alert_type == AlertType.SMA_CROSSOVER:
+                            # Price crosses SMA (from below to above or above to below)
+                            try:
+                                if alert.sma_period is None:
+                                    logger.error(
+                                        f"SMA_CROSSOVER alert missing sma_period",
+                                        extra={"alert_id": alert.id}
+                                    )
+                                    continue
+                                sma_data = calculate_sma(symbol, alert.sma_period)
+                                sma_value_for_email = sma_data["sma"]
+                                sma_period_for_email = alert.sma_period
+                                
+                                # Check for crossover: price was on one side, now on other
+                                if alert.last_price is not None:
+                                    prev_above = alert.last_price > sma_value_for_email
+                                    curr_above = current_price > sma_value_for_email
+                                    should_trigger = prev_above != curr_above
+                                    
+                                    if should_trigger:
+                                        direction = "above" if curr_above else "below"
+                                        logger.info(
+                                            f"SMA_CROSSOVER detected",
+                                            extra={
+                                                "alert_id": alert.id,
+                                                "symbol": symbol,
+                                                "previous_price": alert.last_price,
+                                                "current_price": current_price,
+                                                "sma": sma_value_for_email,
+                                                "period": alert.sma_period,
+                                                "direction": direction,
+                                            }
+                                        )
+                                    else:
+                                        logger.debug(
+                                            f"SMA_CROSSOVER no cross detected",
+                                            extra={
+                                                "alert_id": alert.id,
+                                                "symbol": symbol,
+                                                "previous_price": alert.last_price,
+                                                "current_price": current_price,
+                                                "sma": sma_value_for_email,
+                                            }
+                                        )
+                                else:
+                                    # First check - establish baseline
+                                    logger.debug(
+                                        f"SMA_CROSSOVER first check (establishing baseline)",
+                                        extra={
+                                            "alert_id": alert.id,
+                                            "symbol": symbol,
+                                            "current_price": current_price,
+                                            "sma": sma_value_for_email,
+                                        }
+                                    )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating SMA for SMA_CROSSOVER alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
+                        
+                        elif alert_type == AlertType.RSI_OVERBOUGHT:
+                            # RSI > 70 (overbought condition)
+                            try:
+                                if alert.rsi_period is None:
+                                    logger.error(
+                                        f"RSI_OVERBOUGHT alert missing rsi_period",
+                                        extra={"alert_id": alert.id}
+                                    )
+                                    continue
+                                rsi_data = calculate_rsi(symbol, alert.rsi_period)
+                                rsi_value_for_email = rsi_data["rsi"]
+                                rsi_period_for_email = alert.rsi_period
+                                should_trigger = rsi_value_for_email > 70
+                                logger.debug(
+                                    f"RSI_OVERBOUGHT check",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "rsi": rsi_value_for_email,
+                                        "period": alert.rsi_period,
+                                        "should_trigger": should_trigger,
+                                    }
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating RSI for RSI_OVERBOUGHT alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
+                        
+                        elif alert_type == AlertType.RSI_OVERSOLD:
+                            # RSI < 30 (oversold condition)
+                            try:
+                                if alert.rsi_period is None:
+                                    logger.error(
+                                        f"RSI_OVERSOLD alert missing rsi_period",
+                                        extra={"alert_id": alert.id}
+                                    )
+                                    continue
+                                rsi_data = calculate_rsi(symbol, alert.rsi_period)
+                                rsi_value_for_email = rsi_data["rsi"]
+                                rsi_period_for_email = alert.rsi_period
+                                should_trigger = rsi_value_for_email < 30
+                                logger.debug(
+                                    f"RSI_OVERSOLD check",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "rsi": rsi_value_for_email,
+                                        "period": alert.rsi_period,
+                                        "should_trigger": should_trigger,
+                                    }
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating RSI for RSI_OVERSOLD alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
+                        
+                        elif alert_type == AlertType.RSI_CROSSOVER:
+                            # RSI crosses 30 or 70 thresholds
+                            try:
+                                if alert.rsi_period is None:
+                                    logger.error(
+                                        f"RSI_CROSSOVER alert missing rsi_period",
+                                        extra={"alert_id": alert.id}
+                                    )
+                                    continue
+                                rsi_data = calculate_rsi(symbol, alert.rsi_period)
+                                rsi_value_for_email = rsi_data["rsi"]
+                                rsi_period_for_email = alert.rsi_period
+                                
+                                # Check for RSI crossing thresholds
+                                if alert.last_rsi is not None:
+                                    # Crossover from oversold to overbought zone
+                                    crossed_30_up = alert.last_rsi <= 30 and rsi_value_for_email > 30
+                                    # Crossover from overbought to oversold zone
+                                    crossed_70_down = alert.last_rsi >= 70 and rsi_value_for_email < 70
+                                    should_trigger = crossed_30_up or crossed_70_down
+                                    
+                                    if should_trigger:
+                                        if crossed_30_up:
+                                            direction = "above 30"
+                                        else:
+                                            direction = "below 70"
+                                        logger.info(
+                                            f"RSI_CROSSOVER detected",
+                                            extra={
+                                                "alert_id": alert.id,
+                                                "symbol": symbol,
+                                                "previous_rsi": alert.last_rsi,
+                                                "current_rsi": rsi_value_for_email,
+                                                "period": alert.rsi_period,
+                                                "direction": direction,
+                                            }
+                                        )
+                                    else:
+                                        logger.debug(
+                                            f"RSI_CROSSOVER no cross detected",
+                                            extra={
+                                                "alert_id": alert.id,
+                                                "symbol": symbol,
+                                                "previous_rsi": alert.last_rsi,
+                                                "current_rsi": rsi_value_for_email,
+                                            }
+                                        )
+                                else:
+                                    # First check - establish baseline
+                                    logger.debug(
+                                        f"RSI_CROSSOVER first check (establishing baseline)",
+                                        extra={
+                                            "alert_id": alert.id,
+                                            "symbol": symbol,
+                                            "current_rsi": rsi_value_for_email,
+                                        }
+                                    )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating RSI for RSI_CROSSOVER alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
+                        
+                        elif alert_type == AlertType.EMA_ABOVE:
+                            # Price above EMA
+                            try:
+                                if alert.ema_period is None:
+                                    logger.error(
+                                        f"EMA_ABOVE alert missing ema_period",
+                                        extra={"alert_id": alert.id}
+                                    )
+                                    continue
+                                ema_data = calculate_ema(symbol, alert.ema_period)
+                                ema_value_for_email = ema_data["ema"]
+                                ema_period_for_email = alert.ema_period
+                                should_trigger = current_price > ema_value_for_email
+                                logger.debug(
+                                    f"EMA_ABOVE check",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "current_price": current_price,
+                                        "ema": ema_value_for_email,
+                                        "period": alert.ema_period,
+                                        "should_trigger": should_trigger,
+                                    }
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating EMA for EMA_ABOVE alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
+                        
+                        elif alert_type == AlertType.EMA_BELOW:
+                            # Price below EMA
+                            try:
+                                if alert.ema_period is None:
+                                    logger.error(
+                                        f"EMA_BELOW alert missing ema_period",
+                                        extra={"alert_id": alert.id}
+                                    )
+                                    continue
+                                ema_data = calculate_ema(symbol, alert.ema_period)
+                                ema_value_for_email = ema_data["ema"]
+                                ema_period_for_email = alert.ema_period
+                                should_trigger = current_price < ema_value_for_email
+                                logger.debug(
+                                    f"EMA_BELOW check",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "current_price": current_price,
+                                        "ema": ema_value_for_email,
+                                        "period": alert.ema_period,
+                                        "should_trigger": should_trigger,
+                                    }
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating EMA for EMA_BELOW alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
+                        
+                        elif alert_type == AlertType.EMA_CROSSOVER:
+                            # Price crosses EMA (from below to above or above to below)
+                            try:
+                                if alert.ema_period is None:
+                                    logger.error(
+                                        f"EMA_CROSSOVER alert missing ema_period",
+                                        extra={"alert_id": alert.id}
+                                    )
+                                    continue
+                                ema_data = calculate_ema(symbol, alert.ema_period)
+                                ema_value_for_email = ema_data["ema"]
+                                ema_period_for_email = alert.ema_period
+                                
+                                # Check for crossover: price was on one side, now on other
+                                if alert.last_price is not None:
+                                    prev_above = alert.last_price > ema_value_for_email
+                                    curr_above = current_price > ema_value_for_email
+                                    should_trigger = prev_above != curr_above
+                                    
+                                    if should_trigger:
+                                        direction = "above" if curr_above else "below"
+                                        logger.info(
+                                            f"EMA_CROSSOVER detected",
+                                            extra={
+                                                "alert_id": alert.id,
+                                                "symbol": symbol,
+                                                "previous_price": alert.last_price,
+                                                "current_price": current_price,
+                                                "ema": ema_value_for_email,
+                                                "period": alert.ema_period,
+                                                "direction": direction,
+                                            }
+                                        )
+                                    else:
+                                        logger.debug(
+                                            f"EMA_CROSSOVER no cross detected",
+                                            extra={
+                                                "alert_id": alert.id,
+                                                "symbol": symbol,
+                                                "previous_price": alert.last_price,
+                                                "current_price": current_price,
+                                                "ema": ema_value_for_email,
+                                            }
+                                        )
+                                else:
+                                    # First check - establish baseline
+                                    logger.debug(
+                                        f"EMA_CROSSOVER first check (establishing baseline)",
+                                        extra={
+                                            "alert_id": alert.id,
+                                            "symbol": symbol,
+                                            "current_price": current_price,
+                                            "ema": ema_value_for_email,
+                                        }
+                                    )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating EMA for EMA_CROSSOVER alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
+                        
+                        elif alert_type == AlertType.STRONG_BUY_SIGNAL:
+                            # Combined signal: Price > SMA AND Price > EMA AND RSI < 30 (oversold)
+                            try:
+                                if alert.sma_period is None or alert.ema_period is None or alert.rsi_period is None:
+                                    logger.error(
+                                        f"STRONG_BUY_SIGNAL alert missing required periods",
+                                        extra={
+                                            "alert_id": alert.id,
+                                            "sma_period": alert.sma_period,
+                                            "ema_period": alert.ema_period,
+                                            "rsi_period": alert.rsi_period,
+                                        }
+                                    )
+                                    continue
+                                
+                                # Calculate all three indicators
+                                sma_data = calculate_sma(symbol, alert.sma_period)
+                                ema_data = calculate_ema(symbol, alert.ema_period)
+                                rsi_data = calculate_rsi(symbol, alert.rsi_period)
+                                
+                                sma_value_for_email = sma_data["sma"]
+                                ema_value_for_email = ema_data["ema"]
+                                rsi_value_for_email = rsi_data["rsi"]
+                                sma_period_for_email = alert.sma_period
+                                ema_period_for_email = alert.ema_period
+                                rsi_period_for_email = alert.rsi_period
+                                
+                                # All conditions must be met for strong buy signal
+                                price_above_sma = current_price > sma_value_for_email
+                                price_above_ema = current_price > ema_value_for_email
+                                rsi_oversold = rsi_value_for_email < 30
+                                
+                                should_trigger = price_above_sma and price_above_ema and rsi_oversold
+                                
+                                logger.debug(
+                                    f"STRONG_BUY_SIGNAL check",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "current_price": current_price,
+                                        "sma": sma_value_for_email,
+                                        "ema": ema_value_for_email,
+                                        "rsi": rsi_value_for_email,
+                                        "price_above_sma": price_above_sma,
+                                        "price_above_ema": price_above_ema,
+                                        "rsi_oversold": rsi_oversold,
+                                        "should_trigger": should_trigger,
+                                    }
+                                )
+                                
+                                if should_trigger:
+                                    logger.info(
+                                        f"🚀 STRONG_BUY_SIGNAL detected",
+                                        extra={
+                                            "alert_id": alert.id,
+                                            "symbol": symbol,
+                                            "current_price": current_price,
+                                            "sma": sma_value_for_email,
+                                            "ema": ema_value_for_email,
+                                            "rsi": rsi_value_for_email,
+                                        }
+                                    )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating indicators for STRONG_BUY_SIGNAL alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
+                        
+                        elif alert_type == AlertType.STRONG_SELL_SIGNAL:
+                            # Combined signal: Price < SMA AND Price < EMA AND RSI > 70 (overbought)
+                            try:
+                                if alert.sma_period is None or alert.ema_period is None or alert.rsi_period is None:
+                                    logger.error(
+                                        f"STRONG_SELL_SIGNAL alert missing required periods",
+                                        extra={
+                                            "alert_id": alert.id,
+                                            "sma_period": alert.sma_period,
+                                            "ema_period": alert.ema_period,
+                                            "rsi_period": alert.rsi_period,
+                                        }
+                                    )
+                                    continue
+                                
+                                # Calculate all three indicators
+                                sma_data = calculate_sma(symbol, alert.sma_period)
+                                ema_data = calculate_ema(symbol, alert.ema_period)
+                                rsi_data = calculate_rsi(symbol, alert.rsi_period)
+                                
+                                sma_value_for_email = sma_data["sma"]
+                                ema_value_for_email = ema_data["ema"]
+                                rsi_value_for_email = rsi_data["rsi"]
+                                sma_period_for_email = alert.sma_period
+                                ema_period_for_email = alert.ema_period
+                                rsi_period_for_email = alert.rsi_period
+                                
+                                # All conditions must be met for strong sell signal
+                                price_below_sma = current_price < sma_value_for_email
+                                price_below_ema = current_price < ema_value_for_email
+                                rsi_overbought = rsi_value_for_email > 70
+                                
+                                should_trigger = price_below_sma and price_below_ema and rsi_overbought
+                                
+                                logger.debug(
+                                    f"STRONG_SELL_SIGNAL check",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "current_price": current_price,
+                                        "sma": sma_value_for_email,
+                                        "ema": ema_value_for_email,
+                                        "rsi": rsi_value_for_email,
+                                        "price_below_sma": price_below_sma,
+                                        "price_below_ema": price_below_ema,
+                                        "rsi_overbought": rsi_overbought,
+                                        "should_trigger": should_trigger,
+                                    }
+                                )
+                                
+                                if should_trigger:
+                                    logger.info(
+                                        f"📉 STRONG_SELL_SIGNAL detected",
+                                        extra={
+                                            "alert_id": alert.id,
+                                            "symbol": symbol,
+                                            "current_price": current_price,
+                                            "sma": sma_value_for_email,
+                                            "ema": ema_value_for_email,
+                                            "rsi": rsi_value_for_email,
+                                        }
+                                    )
+                            except Exception as e:
+                                logger.error(
+                                    f"Error calculating indicators for STRONG_SELL_SIGNAL alert",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                    exc_info=True
+                                )
+                                continue
                         
                         elif alert_type == AlertType.CUSTOM:
                             should_trigger = alert.check_alert(current_price)
@@ -1066,14 +1693,58 @@ def check_all_alerts() -> None:
                         
                         # Trigger alert if condition met AND not in cooldown
                         if should_trigger:
-                            if trigger_alert(db, alert, current_price):
+                            if trigger_alert(
+                                db,
+                                alert,
+                                current_price,
+                                sma_value=sma_value_for_email,
+                                sma_period=sma_period_for_email,
+                                ema_value=ema_value_for_email,
+                                ema_period=ema_period_for_email,
+                                rsi_value=rsi_value_for_email,
+                                rsi_period=rsi_period_for_email,
+                            ):
                                 total_triggered += 1
                                 stats_by_type[alert_type.value] += 1
                         
-                        # Update last_price for percentage change and crash alerts
-                        if alert_type in [AlertType.PERCENTAGE_CHANGE, AlertType.CRASH]:
+                        # Update last_price for percentage change, crash, SMA crossover, and EMA crossover alerts
+                        if alert_type in [AlertType.PERCENTAGE_CHANGE, AlertType.CRASH, AlertType.SMA_CROSSOVER, AlertType.EMA_CROSSOVER]:
                             alert.last_price = current_price
                             db.commit()
+                        
+                        # Update last_ema for EMA crossover alerts
+                        if alert_type == AlertType.EMA_CROSSOVER:
+                            try:
+                                if alert.ema_period is not None:
+                                    ema_data = calculate_ema(symbol, alert.ema_period)
+                                    alert.last_ema = ema_data["ema"]
+                                    db.commit()
+                            except Exception as e:
+                                logger.error(
+                                    f"Error updating last_ema for EMA_CROSSOVER",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                )
+                        
+                        # Update last_rsi for RSI crossover alerts
+                        if alert_type == AlertType.RSI_CROSSOVER:
+                            try:
+                                if alert.rsi_period is not None:
+                                    rsi_data = calculate_rsi(symbol, alert.rsi_period)
+                                    alert.last_rsi = rsi_data["rsi"]
+                                    db.commit()
+                            except Exception as e:
+                                logger.error(
+                                    f"Error updating last_rsi for RSI_CROSSOVER",
+                                    extra={
+                                        "alert_id": alert.id,
+                                        "symbol": symbol,
+                                        "error": str(e),
+                                    },
+                                )
                         
                     except Exception as e:
                         logger.error(

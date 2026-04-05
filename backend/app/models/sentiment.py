@@ -1,7 +1,9 @@
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
 
@@ -9,15 +11,14 @@ from app.db.session import Base
 class SentimentRecord(Base):
     __tablename__ = "sentiment_records"
 
-    id: int = Column(Integer, primary_key=True, index=True)
-    stock_id: int = Column(Integer, ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False)
-    source: str = Column(String(32), nullable=False)  # e.g. twitter, news, reddit
-    window_start: datetime = Column(DateTime, nullable=False)
-    window_end: datetime = Column(DateTime, nullable=False)
-    sentiment_score: float = Column(Float, nullable=False)  # -1..1
-    confidence: float = Column(Float, nullable=True)  # 0..1
-    mentions_count: int = Column(Integer, nullable=True)
-    raw_sample_count: int = Column(Integer, nullable=True)
-    extra_data: dict | None = Column(JSONB, nullable=True)  # extra info
-    created_at: datetime = Column(DateTime, default=datetime.utcnow, nullable=False)
-
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    stock_id: Mapped[int] = mapped_column(ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    window_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    window_end: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    sentiment_score: Mapped[float] = mapped_column(Float, nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mentions_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    raw_sample_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
