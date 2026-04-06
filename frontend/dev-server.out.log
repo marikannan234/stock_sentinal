@@ -1,0 +1,68 @@
+
+> stocksentinel-frontend@0.1.0 dev
+> next dev
+
+   ▲ Next.js 15.5.14
+   - Local:        http://localhost:3001
+   - Network:      http://172.31.204.132:3001
+
+ ✓ Starting...
+ ✓ Ready in 5.9s
+ ○ Compiling / ...
+ ✓ Compiled / in 19.6s (763 modules)
+ GET / 200 in 22211ms
+ ○ Compiling /login ...
+ ✓ Compiled /login in 3.3s (818 modules)
+ GET /login 200 in 3913ms
+ GET /login 200 in 142ms
+ ○ Compiling /register ...
+ ✓ Compiled /register in 1641ms (811 modules)
+ GET /register 200 in 2060ms
+ GET /register 200 in 1090ms
+ GET /login 200 in 140ms
+ GET /register 200 in 98ms
+ GET /login 200 in 84ms
+ GET /register 200 in 102ms
+   ▲ Next.js 15.5.14
+   - Local:        http://localhost:3001
+   - Network:      http://172.31.204.132:3001
+
+ ✓ Starting...
+
+   We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
+   The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
+
+   	- include was updated to add '.next/types/**/*.ts'
+
+ ✓ Ready in 6.8s
+ ○ Compiling /register ...
+ ✓ Compiled /register in 6.6s (797 modules)
+ GET /register 200 in 9059ms
+ GET /register 200 in 335ms
+ ○ Compiling /login ...
+ ✓ Compiled /login in 1255ms (804 modules)
+ GET /login 200 in 1793ms
+   ▲ Next.js 15.5.14
+   - Local:        http://localhost:3001
+   - Network:      http://172.31.204.132:3001
+
+ ✓ Starting...
+ ✓ Ready in 6.9s
+   ▲ Next.js 15.5.14
+   - Local:        http://localhost:3001
+   - Network:      http://172.31.204.132:3001
+
+ ✓ Starting...
+ ✓ Ready in 7.7s
+   ▲ Next.js 15.5.14
+   - Local:        http://localhost:3001
+   - Network:      http://172.31.204.132:3001
+
+ ✓ Starting...
+ ✓ Ready in 5.2s
+   ▲ Next.js 15.5.14
+   - Local:        http://localhost:3001
+   - Network:      http://172.31.204.132:3001
+
+ ✓ Starting...
+ ✓ Ready in 5.9s

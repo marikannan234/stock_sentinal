@@ -1,0 +1,16 @@
+.venv
+__pycache__
+logs
+*.log
+*.md
+*.ps1
+*.pyc
+diagnose_postgres.py
+diagnostic_test.py
+reset-database.ps1
+setup_postgres.sql
+test_*.py
+test_*.sh
+test_*.ps1
+verify_logging.py
+verify_logging.ps1

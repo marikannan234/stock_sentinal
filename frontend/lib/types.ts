@@ -1,8 +1,3 @@
-export type ApiMessage = {
-  detail?: string;
-  message?: string;
-};
-
 export type UserProfile = {
   id: number;
   email: string;
@@ -95,29 +90,11 @@ export type StockDetails = {
   timestamp: string;
 };
 
-export type IndicatorValue = {
-  symbol: string;
-  period: number;
-  current_price: number;
-};
-
-export type SMAResponse = IndicatorValue & {
-  sma: number;
-};
-
-export type EMAResponse = IndicatorValue & {
-  ema: number;
-};
-
-export type RSIResponse = IndicatorValue & {
-  rsi: number;
-};
-
 export type CombinedIndicators = {
   symbol: string;
-  sma: SMAResponse;
-  ema: EMAResponse;
-  rsi: RSIResponse;
+  sma: { sma: number };
+  ema: { ema: number };
+  rsi: { rsi: number };
 };
 
 export type NewsArticle = {
@@ -137,17 +114,15 @@ export type NewsResponse = {
   count: number;
 };
 
-export type SentimentInsight = {
-  sentiment_score: number;
-  sentiment_label: string;
-  recommendation: string;
-  confidence: number;
-  analysis_count: number;
-};
-
 export type NewsWithSentiment = {
   articles: NewsArticle[];
-  sentiment_analysis: SentimentInsight;
+  sentiment_analysis: {
+    sentiment_score: number;
+    sentiment_label: string;
+    recommendation: string;
+    confidence: number;
+    analysis_count: number;
+  };
   count: number;
 };
 
@@ -155,6 +130,15 @@ export type PortfolioHolding = {
   ticker: string;
   quantity: number;
   average_price: number;
+  current_price?: number | null;
+  current_value?: number | null;
+  invested_amount?: number | null;
+  pl_amount?: number | null;
+  pl_percent?: number | null;
+  day_change?: number | null;
+  day_change_percent?: number | null;
+  name?: string | null;
+  asset_class?: string | null;
 };
 
 export type PortfolioSummary = {
@@ -162,6 +146,25 @@ export type PortfolioSummary = {
   current_value: number;
   total_pl: number;
   percent_pl: number;
+  day_pl: number;
+  day_percent: number;
+  buying_power: number;
+};
+
+export type PortfolioAllocation = {
+  category: string;
+  value: number;
+  percent: number;
+};
+
+export type PortfolioAllocationResponse = {
+  total_value: number;
+  allocations: PortfolioAllocation[];
+};
+
+export type PortfolioGrowthPoint = {
+  date: string;
+  value: number;
 };
 
 export type WatchlistResponse = {

@@ -1,122 +1,83 @@
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Design System Colors */
-  --color-surface: #131315;
-  --color-surface-container: #201f22;
-  --color-surface-container-low: #1c1b1d;
-  --color-surface-container-high: #2a2a2c;
-  --color-surface-container-highest: #353437;
-  --color-surface-bright: #39393b;
-  --color-surface-dim: #131315;
-  --color-on-surface: #e5e1e4;
-  --color-on-surface-variant: #c2c6d6;
-  --color-primary: #adc6ff;
-  --color-primary-container: #4d8eff;
-  --color-on-primary: #002e6a;
-  --color-outline-variant: #424754;
+  --surface: #131315;
+  --surface-lowest: #0e0e10;
+  --surface-low: #1c1b1d;
+  --surface-high: #2a2a2c;
+  --surface-highest: #353437;
+  --surface-bright: #39393b;
+  --on-surface: #e5e1e4;
+  --on-surface-variant: #c2c6d6;
+  --primary: #adc6ff;
+  --primary-strong: #4d8eff;
+  --on-primary: #002e6a;
+  --secondary: #4edea3;
+  --tertiary: #ffb3ad;
+  --outline: #424754;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(77, 142, 255, 0.08), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(78, 222, 163, 0.05), transparent 28%),
+    var(--surface);
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 antialiased;
-  font-family: 'Inter', var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--on-surface);
 }
 
 a {
-  @apply transition;
+  color: inherit;
+  text-decoration: none;
 }
 
-/* Material Symbols Icons */
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
 .material-symbols-outlined {
-  font-family: 'Material Symbols Outlined';
-  font-weight: normal;
-  font-style: normal;
-  font-size: 24px;
-  display: inline-block;
-  line-height: 1;
-  text-transform: none;
-  letter-spacing: normal;
-  word-wrap: normal;
-  white-space: nowrap;
-  direction: ltr;
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
 }
 
-@keyframes ticker-marquee {
+.ticker-track {
+  animation: ticker-scroll 32s linear infinite;
+  width: max-content;
+}
+
+@keyframes ticker-scroll {
   0% {
-    transform: translateX(0%);
+    transform: translateX(0);
   }
+
   100% {
-    transform: translateX(-50%);
+    transform: translateX(-20%);
   }
 }
 
-.ticker-marquee {
-  animation: ticker-marquee 30s linear infinite;
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-/* Dashboard color utilities */
-.bg-surface {
-  @apply bg-[#131315];
+::-webkit-scrollbar-track {
+  background: var(--surface);
 }
 
-.bg-surface-container {
-  @apply bg-[#201f22];
-}
-
-.bg-surface-container-lowest {
-  @apply bg-[#0e0e10];
-}
-
-.bg-surface-container-low {
-  @apply bg-[#1c1b1d];
-}
-
-.bg-surface-container-high {
-  @apply bg-[#2a2a2c];
-}
-
-.bg-surface-container-highest {
-  @apply bg-[#353437];
-}
-
-.text-on-surface {
-  @apply text-[#e5e1e4];
-}
-
-.text-on-surface-variant {
-  @apply text-[#c2c6d6];
-}
-
-.bg-primary {
-  @apply bg-[#adc6ff];
-}
-
-.text-primary {
-  @apply text-[#adc6ff];
-}
-
-.bg-secondary {
-  @apply bg-[#4edea3];
-}
-
-.text-secondary {
-  @apply text-[#4edea3];
-}
-
-.bg-tertiary {
-  @apply bg-[#ffb3ad];
-}
-
-.text-tertiary {
-  @apply text-[#ffb3ad];
-}
-
-/* Gradient utilities */
-.bg-background {
-  @apply bg-[#131315];
+::-webkit-scrollbar-thumb {
+  background: var(--surface-highest);
+  border-radius: 999px;
 }

@@ -94,6 +94,12 @@ class AnalyzeSentimentRequest(BaseModel):
 # Global News Endpoint
 # ============================================
 @router.get(
+    "",
+    response_model=NewsResponse,
+    summary="Get global market news",
+    description="Fetch latest financial and economic news from around the world.",
+)
+@router.get(
     "/global",
     response_model=NewsResponse,
     summary="Get global market news",

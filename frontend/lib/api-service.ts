@@ -10,6 +10,8 @@ import type {
   NewsWithSentiment,
   PortfolioHolding,
   PortfolioSummary,
+  PortfolioAllocationResponse,
+  PortfolioGrowthPoint,
   StockDetails,
   SupportTicket,
   SymbolSearchItem,
@@ -103,7 +105,7 @@ export const indicatorService = {
 
 export const newsService = {
   async global(limit = 12) {
-    const { data } = await api.get<NewsResponse>('/news/global', { params: { limit } });
+    const { data } = await api.get<NewsResponse>('/news', { params: { limit } });
     return data;
   },
   async bySymbol(symbol: string, limit = 12) {
@@ -127,6 +129,14 @@ export const portfolioService = {
   },
   async add(ticker: string, quantity: number, price: number) {
     const { data } = await api.post<PortfolioHolding[]>('/portfolio', { ticker, quantity, price });
+    return data;
+  },
+  async allocation() {
+    const { data } = await api.get<PortfolioAllocationResponse>('/portfolio/allocation');
+    return data;
+  },
+  async growth(range: '1d' | '1w' | '1m' | '1y') {
+    const { data } = await api.get<PortfolioGrowthPoint[]>('/portfolio/growth', { params: { range } });
     return data;
   },
   async remove(ticker: string) {

@@ -1,165 +1,90 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-
-import { AppShell } from '@/components/dashboard/AppShell';
-import { ProtectedShell } from '@/components/dashboard/ProtectedShell';
-import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/States';
-import { SurfaceCard } from '@/components/dashboard/SurfaceCard';
-import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/input';
-import { useToast } from '@/components/ui/toast';
-import { alertService, getErrorMessage } from '@/lib/api-service';
-import { formatDateTime } from '@/lib/format';
-import type { AlertItem } from '@/lib/types';
+import { FormEvent, useEffect, useState } from 'react';
+import { ProtectedScreen } from '@/components/sentinel/protected-screen';
+import { SentinelShell } from '@/components/sentinel/shell';
+import { SurfaceCard } from '@/components/sentinel/primitives';
+import { alertService, marketService } from '@/lib/api-service';
+import type { AlertItem, LiveQuote } from '@/lib/types';
+import { formatDateLabel } from '@/lib/sentinel-utils';
 
 export default function AlertsPage() {
-  const { showToast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
-    stock_symbol: '',
-    alert_type: 'price',
-    condition: '>',
-    target_value: '',
-  });
+  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
+  const [symbol, setSymbol] = useState('');
+  const [target, setTarget] = useState('');
+  const [condition, setCondition] = useState('>');
 
   async function loadAlerts() {
-    try {
-      setLoading(true);
-      setError('');
-      setAlerts(await alertService.list());
-    } catch (err) {
-      setError(getErrorMessage(err, 'Unable to load alerts.'));
-    } finally {
-      setLoading(false);
-    }
+    const data = await alertService.list();
+    setAlerts(data);
   }
 
   useEffect(() => {
-    void loadAlerts();
+    Promise.allSettled([loadAlerts(), marketService.getLiveRibbon()]).then(([_, ribbonResult]) => {
+      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks.slice(0, 8));
+    });
   }, []);
 
-  async function handleCreate(event: React.FormEvent) {
+  async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!form.stock_symbol.trim() || Number(form.target_value) <= 0) {
-      showToast({ title: 'Invalid alert', description: 'Symbol and target value are required.', variant: 'error' });
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      await alertService.create({
-        stock_symbol: form.stock_symbol.trim().toUpperCase(),
-        alert_type: form.alert_type,
-        condition: form.alert_type === 'price' ? form.condition : undefined,
-        target_value: Number(form.target_value),
-      });
-      showToast({ title: 'Alert created', description: 'Your alert is now active.', variant: 'success' });
-      setForm({ stock_symbol: '', alert_type: 'price', condition: '>', target_value: '' });
-      await loadAlerts();
-    } catch (err) {
-      showToast({ title: 'Unable to create alert', description: getErrorMessage(err), variant: 'error' });
-    } finally {
-      setSubmitting(false);
-    }
+    if (!symbol || !target) return;
+    await alertService.create({
+      stock_symbol: symbol.toUpperCase(),
+      condition,
+      target_value: Number(target),
+      alert_type: 'price',
+    });
+    setSymbol('');
+    setTarget('');
+    await loadAlerts();
   }
 
-  async function toggleAlert(item: AlertItem) {
-    try {
-      await alertService.update(item.id, !item.is_active);
-      showToast({ title: 'Alert updated', description: `${item.stock_symbol} alert was updated.`, variant: 'success' });
-      await loadAlerts();
-    } catch (err) {
-      showToast({ title: 'Unable to update alert', description: getErrorMessage(err), variant: 'error' });
-    }
-  }
-
-  async function deleteAlert(id: number) {
-    try {
-      await alertService.remove(id);
-      showToast({ title: 'Alert deleted', description: 'The alert was removed.', variant: 'success' });
-      await loadAlerts();
-    } catch (err) {
-      showToast({ title: 'Unable to delete alert', description: getErrorMessage(err), variant: 'error' });
-    }
+  async function toggleAlert(id: number, isActive: boolean) {
+    await alertService.update(id, !isActive);
+    await loadAlerts();
   }
 
   return (
-    <ProtectedShell>
-      <AppShell currentPage="alerts" title="Alerts" description="Manage real backend alerts for prices, crashes, and volume changes.">
-        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-          <SurfaceCard>
-            <h2 className="text-xl font-bold text-white">Create Alert</h2>
-            <form className="mt-5 space-y-4" onSubmit={handleCreate}>
-              <Input label="Symbol" value={form.stock_symbol} onChange={(event) => setForm((current) => ({ ...current, stock_symbol: event.target.value }))} />
-              <Select
-                label="Alert Type"
-                value={form.alert_type}
-                onChange={(event) => setForm((current) => ({ ...current, alert_type: event.target.value }))}
-                options={[
-                  { value: 'price', label: 'Price' },
-                  { value: 'percentage_change', label: 'Percentage Change' },
-                  { value: 'volume_spike', label: 'Volume Spike' },
-                  { value: 'crash', label: 'Crash' },
-                ]}
-              />
-              {form.alert_type === 'price' ? (
-                <Select
-                  label="Condition"
-                  value={form.condition}
-                  onChange={(event) => setForm((current) => ({ ...current, condition: event.target.value }))}
-                  options={[
-                    { value: '>', label: 'Greater than' },
-                    { value: '<', label: 'Less than' },
-                    { value: '>=', label: 'Greater than or equal' },
-                    { value: '<=', label: 'Less than or equal' },
-                  ]}
-                />
-              ) : null}
-              <Input label="Target Value" type="number" min="0" step="0.01" value={form.target_value} onChange={(event) => setForm((current) => ({ ...current, target_value: event.target.value }))} />
-              <Button type="submit" fullWidth isLoading={submitting}>Create Alert</Button>
+    <ProtectedScreen>
+      <SentinelShell title="Alerts" subtitle="Price-based sentinel triggers and monitoring." ribbon={ribbon}>
+        <div className="grid grid-cols-12 gap-6">
+          <SurfaceCard className="col-span-12 p-6 lg:col-span-4">
+            <h2 className="mb-6 text-xl font-bold text-white">Create Alert</h2>
+            <form className="space-y-4" onSubmit={handleCreate}>
+              <input value={symbol} onChange={(event) => setSymbol(event.target.value)} className="w-full rounded-xl bg-[var(--surface-lowest)] px-4 py-4 text-white outline-none" placeholder="Ticker (AAPL)" />
+              <div className="grid grid-cols-[120px_1fr] gap-3">
+                <select value={condition} onChange={(event) => setCondition(event.target.value)} className="rounded-xl bg-[var(--surface-lowest)] px-4 py-4 text-white outline-none">
+                  <option>{'>'}</option>
+                  <option>{'<'}</option>
+                  <option>{'>='}</option>
+                  <option>{'<='}</option>
+                </select>
+                <input value={target} onChange={(event) => setTarget(event.target.value)} className="rounded-xl bg-[var(--surface-lowest)] px-4 py-4 text-white outline-none" placeholder="Target value" type="number" step="0.01" />
+              </div>
+              <button className="w-full rounded-2xl bg-[linear-gradient(135deg,#adc6ff_0%,#4d8eff_100%)] px-5 py-4 text-sm font-bold text-[var(--on-primary)]">Deploy Alert</button>
             </form>
           </SurfaceCard>
-
-          {loading ? (
-            <LoadingState label="Loading alerts..." />
-          ) : error ? (
-            <ErrorState message={error} onRetry={() => void loadAlerts()} />
-          ) : !alerts.length ? (
-            <EmptyState title="No alerts yet" message="Create your first alert to start monitoring price action." />
-          ) : (
-            <SurfaceCard>
-              <h2 className="text-xl font-bold text-white">Active Alerts</h2>
-              <div className="mt-5 space-y-3">
-                {alerts.map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-white/5 bg-[#17161a] p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="font-semibold text-white">{item.stock_symbol}</p>
-                        <p className="mt-1 text-sm text-on-surface-variant">
-                          {item.alert_type} {item.condition ?? ''} {item.target_value ?? 'N/A'}
-                        </p>
-                        <p className="mt-1 text-xs text-on-surface-variant">Created {formatDateTime(item.created_at)}</p>
-                      </div>
-                      <div className="flex gap-3">
-                        <Button variant="outline" onClick={() => void toggleAlert(item)}>
-                          {item.is_active ? 'Disable' : 'Enable'}
-                        </Button>
-                        <Button variant="ghost" onClick={() => void deleteAlert(item.id)}>
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
+          <SurfaceCard className="col-span-12 overflow-hidden lg:col-span-8">
+            <div className="border-b border-white/5 px-6 py-5">
+              <h2 className="text-xl font-bold text-white">Active Watch Grid</h2>
+            </div>
+            <div className="divide-y divide-white/5">
+              {alerts.map((alert) => (
+                <div key={alert.id} className="flex items-center justify-between px-6 py-5">
+                  <div>
+                    <p className="font-bold text-white">{alert.stock_symbol}</p>
+                    <p className="text-xs text-[var(--on-surface-variant)]">{alert.condition} {alert.target_value} • {formatDateLabel(alert.created_at)}</p>
                   </div>
-                ))}
-              </div>
-            </SurfaceCard>
-          )}
+                  <button onClick={() => toggleAlert(alert.id, alert.is_active)} className={alert.is_active ? 'rounded-full bg-secondary/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-secondary' : 'rounded-full bg-[var(--surface-high)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)]'}>
+                    {alert.is_active ? 'Live' : 'Paused'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </SurfaceCard>
         </div>
-      </AppShell>
-    </ProtectedShell>
+      </SentinelShell>
+    </ProtectedScreen>
   );
 }

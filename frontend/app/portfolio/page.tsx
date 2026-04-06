@@ -1,131 +1,160 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ProtectedScreen } from '@/components/sentinel/protected-screen';
+import { AllocationDonut, SentinelLineChart } from '@/components/sentinel/charts';
+import { SentinelShell } from '@/components/sentinel/shell';
+import { SurfaceCard } from '@/components/sentinel/primitives';
+import { marketService, portfolioService } from '@/lib/api-service';
+import type { LiveQuote, PortfolioAllocationResponse, PortfolioGrowthPoint, PortfolioHolding, PortfolioSummary } from '@/lib/types';
+import { formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
-import { AppShell } from '@/components/dashboard/AppShell';
-import { ProtectedShell } from '@/components/dashboard/ProtectedShell';
-import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/States';
-import { MetricCard, SurfaceCard } from '@/components/dashboard/SurfaceCard';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/components/ui/toast';
-import { getErrorMessage, portfolioService } from '@/lib/api-service';
-import { formatCurrency } from '@/lib/format';
-import type { PortfolioHolding, PortfolioSummary } from '@/lib/types';
+const ranges: Array<'1d' | '1w' | '1m' | '1y'> = ['1d', '1w', '1m', '1y'];
 
 export default function PortfolioPage() {
-  const { showToast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [holdings, setHoldings] = useState<PortfolioHolding[]>([]);
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ ticker: '', quantity: '', price: '' });
-
-  async function loadPortfolio() {
-    try {
-      setLoading(true);
-      setError('');
-      const [holdingData, summaryData] = await Promise.all([portfolioService.list(), portfolioService.summary()]);
-      setHoldings(holdingData);
-      setSummary(summaryData);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Unable to load portfolio.'));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [holdings, setHoldings] = useState<PortfolioHolding[]>([]);
+  const [allocation, setAllocation] = useState<PortfolioAllocationResponse | null>(null);
+  const [growth, setGrowth] = useState<PortfolioGrowthPoint[]>([]);
+  const [range, setRange] = useState<'1d' | '1w' | '1m' | '1y'>('1y');
+  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
 
   useEffect(() => {
-    void loadPortfolio();
+    Promise.allSettled([portfolioService.summary(), portfolioService.list(), portfolioService.allocation(), marketService.getLiveRibbon()]).then(
+      ([summaryResult, holdingsResult, allocationResult, ribbonResult]) => {
+        if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value);
+        if (holdingsResult.status === 'fulfilled') setHoldings(holdingsResult.value);
+        if (allocationResult.status === 'fulfilled') setAllocation(allocationResult.value);
+        if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks.slice(0, 8));
+      },
+    );
   }, []);
 
-  async function handleAdd(event: React.FormEvent) {
-    event.preventDefault();
-    if (!form.ticker.trim() || Number(form.quantity) <= 0 || Number(form.price) <= 0) {
-      showToast({ title: 'Invalid portfolio input', description: 'Ticker, quantity, and price are required.', variant: 'error' });
-      return;
-    }
+  useEffect(() => {
+    portfolioService.growth(range).then(setGrowth).catch(() => setGrowth([]));
+  }, [range]);
 
-    try {
-      setSubmitting(true);
-      await portfolioService.add(form.ticker.trim().toUpperCase(), Number(form.quantity), Number(form.price));
-      setForm({ ticker: '', quantity: '', price: '' });
-      showToast({ title: 'Holding saved', description: 'Your portfolio has been updated.', variant: 'success' });
-      await loadPortfolio();
-    } catch (err) {
-      showToast({ title: 'Unable to save holding', description: getErrorMessage(err), variant: 'error' });
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleRemove(ticker: string) {
-    try {
-      await portfolioService.remove(ticker);
-      showToast({ title: 'Holding removed', description: `${ticker} was removed from your portfolio.`, variant: 'success' });
-      await loadPortfolio();
-    } catch (err) {
-      showToast({ title: 'Remove failed', description: getErrorMessage(err), variant: 'error' });
-    }
-  }
+  const topPerformer = useMemo(
+    () => [...holdings].sort((a, b) => (b.pl_percent ?? -Infinity) - (a.pl_percent ?? -Infinity))[0],
+    [holdings],
+  );
+  const worstPerformer = useMemo(
+    () => [...holdings].sort((a, b) => (a.pl_percent ?? Infinity) - (b.pl_percent ?? Infinity))[0],
+    [holdings],
+  );
 
   return (
-    <ProtectedShell>
-      <AppShell
-        currentPage="portfolio"
-        title="Portfolio"
-        description="Live holdings and summary metrics sourced directly from your backend."
-        actions={<Button variant="outline" onClick={() => void loadPortfolio()}>Refresh</Button>}
+    <ProtectedScreen>
+      <SentinelShell
+        title="Portfolio Overview"
+        subtitle="Real-time valuation and performance metrics."
+        ribbon={ribbon}
+        headerActions={
+          <div className="flex gap-3">
+            <button className="rounded-2xl bg-[var(--surface-high)] px-5 py-3 text-sm font-bold text-white">Export Report</button>
+            <button className="rounded-2xl bg-[linear-gradient(135deg,#adc6ff_0%,#4d8eff_100%)] px-5 py-3 text-sm font-bold text-[var(--on-primary)]">Add New Holding</button>
+          </div>
+        }
       >
-        {loading ? (
-          <LoadingState label="Loading portfolio..." />
-        ) : error ? (
-          <ErrorState message={error} onRetry={() => void loadPortfolio()} />
-        ) : (
-          <>
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-              <MetricCard label="Current Value" value={formatCurrency(summary?.current_value)} />
-              <MetricCard label="Total Invested" value={formatCurrency(summary?.total_invested)} />
-              <MetricCard label="P&L" value={formatCurrency(summary?.total_pl)} tone={(summary?.total_pl ?? 0) >= 0 ? 'positive' : 'negative'} />
-              <MetricCard label="P&L %" value={`${(summary?.percent_pl ?? 0).toFixed(2)}%`} tone={(summary?.percent_pl ?? 0) >= 0 ? 'positive' : 'negative'} />
-            </div>
+        <section className="mb-8 grid gap-6 md:grid-cols-4">
+          {[
+            ['Total Invested', formatCurrency(summary?.total_invested)],
+            ['Current Value', formatCurrency(summary?.current_value)],
+            ['Overall P&L', `${formatCurrency(summary?.total_pl)} ${formatPercent(summary?.percent_pl)}`],
+            ['Buying Power', formatCurrency(summary?.buying_power)],
+          ].map(([label, value], index) => (
+            <SurfaceCard key={label} className="p-6">
+              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.2em] text-[var(--on-surface-variant)]">{label}</p>
+              <p className={`font-mono text-[38px] font-medium tracking-[-0.06em] ${index === 2 ? ((summary?.total_pl ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary') : 'text-white'}`}>
+                {value}
+              </p>
+            </SurfaceCard>
+          ))}
+        </section>
 
-            <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-              <SurfaceCard>
-                <h2 className="text-xl font-bold text-white">Add Holding</h2>
-                <form className="mt-5 space-y-4" onSubmit={handleAdd}>
-                  <Input label="Ticker" value={form.ticker} onChange={(event) => setForm((current) => ({ ...current, ticker: event.target.value }))} />
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Input label="Quantity" type="number" min="1" step="1" value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} />
-                    <Input label="Average Price" type="number" min="0" step="0.01" value={form.price} onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} />
-                  </div>
-                  <Button type="submit" isLoading={submitting} fullWidth>Add / Update</Button>
-                </form>
-              </SurfaceCard>
-
-              <SurfaceCard>
-                <h2 className="text-xl font-bold text-white">Holdings</h2>
-                <div className="mt-5 space-y-3">
-                  {holdings.length ? holdings.map((holding) => (
-                    <div key={holding.ticker} className="grid gap-4 rounded-2xl border border-white/5 bg-[#17161a] px-4 py-4 md:grid-cols-[1fr_auto_auto_auto] md:items-center">
-                      <div>
-                        <p className="font-semibold text-white">{holding.ticker}</p>
-                        <p className="text-sm text-on-surface-variant">Average {formatCurrency(holding.average_price)}</p>
-                      </div>
-                      <p className="text-sm text-white">{holding.quantity.toFixed(2)} shares</p>
-                      <p className="text-sm text-white">{formatCurrency(holding.quantity * holding.average_price)}</p>
-                      <Button variant="ghost" onClick={() => void handleRemove(holding.ticker)}>Remove</Button>
-                    </div>
-                  )) : (
-                    <EmptyState title="No holdings yet" message="Add your first position to begin tracking your portfolio." />
-                  )}
-                </div>
-              </SurfaceCard>
+        <section className="grid grid-cols-12 gap-8">
+          <SurfaceCard className="col-span-12 overflow-hidden lg:col-span-8">
+            <div className="flex items-center justify-between border-b border-white/5 px-6 py-5">
+              <h2 className="text-lg font-bold text-white">Portfolio Holdings</h2>
+              <div className="flex gap-2">
+                <span className="rounded-full bg-[var(--surface-high)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">Stocks ({holdings.filter((item) => item.asset_class !== 'Crypto').length})</span>
+                <span className="rounded-full bg-[var(--surface-high)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">Crypto ({holdings.filter((item) => item.asset_class === 'Crypto').length})</span>
+              </div>
             </div>
-          </>
-        )}
-      </AppShell>
-    </ProtectedShell>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-[rgba(53,52,55,0.4)] text-[10px] uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">
+                  <tr>
+                    <th className="px-6 py-4">Symbol</th>
+                    <th className="px-6 py-4">Quantity</th>
+                    <th className="px-6 py-4">Avg Price</th>
+                    <th className="px-6 py-4">Current Price</th>
+                    <th className="px-6 py-4 text-right">P&L Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {holdings.map((holding, index) => (
+                    <tr key={holding.ticker} className={index % 2 ? 'bg-[rgba(14,14,16,0.16)]' : ''}>
+                      <td className="px-6 py-5">
+                        <div>
+                          <p className="font-bold text-white">{holding.ticker}</p>
+                          <p className="text-[10px] text-[var(--on-surface-variant)]">{holding.name ?? holding.ticker}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 font-mono">{holding.quantity.toFixed(2)}</td>
+                      <td className="px-6 py-5 font-mono text-[var(--on-surface-variant)]">{formatCurrency(holding.average_price)}</td>
+                      <td className="px-6 py-5 font-mono text-white">{formatCurrency(holding.current_price)}</td>
+                      <td className="px-6 py-5 text-right">
+                        <p className={`font-mono ${((holding.pl_amount ?? 0) >= 0) ? 'text-secondary' : 'text-tertiary'}`}>{formatCurrency(holding.pl_amount)}</p>
+                        <p className={`text-[10px] font-mono ${((holding.pl_percent ?? 0) >= 0) ? 'text-secondary/80' : 'text-tertiary/80'}`}>{formatPercent(holding.pl_percent)}</p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SurfaceCard>
+
+          <div className="col-span-12 space-y-8 lg:col-span-4">
+            <SurfaceCard className="p-6">
+              <h2 className="mb-6 text-sm font-bold uppercase tracking-[0.18em] text-white">Asset Allocation</h2>
+              <AllocationDonut items={allocation?.allocations ?? []} totalValue={allocation?.total_value ?? 0} />
+            </SurfaceCard>
+
+            <SurfaceCard className="flex items-center justify-between border border-secondary/20 bg-[rgba(78,222,163,0.08)] p-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-secondary">Top Performer</p>
+                <p className="text-sm font-bold text-white">{topPerformer?.ticker ?? 'N/A'}</p>
+              </div>
+              <p className="font-mono text-lg font-bold text-secondary">{formatPercent(topPerformer?.pl_percent)}</p>
+            </SurfaceCard>
+            <SurfaceCard className="flex items-center justify-between border border-[#7d3933]/30 bg-[rgba(125,57,51,0.18)] p-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-tertiary">Worst Performer</p>
+                <p className="text-sm font-bold text-white">{worstPerformer?.ticker ?? 'N/A'}</p>
+              </div>
+              <p className="font-mono text-lg font-bold text-tertiary">{formatPercent(worstPerformer?.pl_percent)}</p>
+            </SurfaceCard>
+          </div>
+        </section>
+
+        <SurfaceCard className="mt-8 p-8">
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-white">Portfolio Growth</h2>
+              <p className="text-sm text-[var(--on-surface-variant)]">Value tracked over the selected period.</p>
+            </div>
+            <div className="flex rounded-xl bg-[var(--surface-lowest)] p-1">
+              {ranges.map((option) => (
+                <button key={option} onClick={() => setRange(option)} className={option === range ? 'rounded-lg bg-[var(--surface-bright)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white' : 'px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)]'}>
+                  {option.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+          <SentinelLineChart points={growth} />
+        </SurfaceCard>
+      </SentinelShell>
+    </ProtectedScreen>
   );
 }

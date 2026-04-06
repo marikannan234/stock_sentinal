@@ -41,9 +41,12 @@ services:
   frontend:
     build:
       context: ./frontend
+      no_cache: true
+      args:
+        NEXT_PUBLIC_API_URL: http://stocksentinel-backend:8000
     container_name: stocksentinel-frontend
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api
+      NEXT_PUBLIC_API_URL: http://stocksentinel-backend:8000
     depends_on:
       - backend
     ports:

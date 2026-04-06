@@ -1,125 +1,114 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
-
-import { AppShell } from '@/components/dashboard/AppShell';
-import { ProtectedShell } from '@/components/dashboard/ProtectedShell';
-import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/States';
-import { SurfaceCard } from '@/components/dashboard/SurfaceCard';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/components/ui/toast';
-import { getErrorMessage, marketService, watchlistService } from '@/lib/api-service';
-import { formatCurrency, formatPercent } from '@/lib/format';
-import type { LiveQuote } from '@/lib/types';
+import { FormEvent, useEffect, useState } from 'react';
+import { ProtectedScreen } from '@/components/sentinel/protected-screen';
+import { SentinelShell } from '@/components/sentinel/shell';
+import { SurfaceCard } from '@/components/sentinel/primitives';
+import { marketService, watchlistService } from '@/lib/api-service';
+import type { LiveQuote, MarketSummary } from '@/lib/types';
+import { formatCompactNumber, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
 export default function WatchlistPage() {
-  const { showToast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [symbols, setSymbols] = useState<string[]>([]);
   const [quotes, setQuotes] = useState<LiveQuote[]>([]);
-  const [ticker, setTicker] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [marketSummary, setMarketSummary] = useState<MarketSummary | null>(null);
+  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
+  const [symbolInput, setSymbolInput] = useState('');
 
-  async function loadWatchlist() {
-    try {
-      setLoading(true);
-      setError('');
-      const list = await watchlistService.list();
-      if (!list.tickers.length) {
-        setQuotes([]);
-        return;
-      }
-      const priceResults = await Promise.all(list.tickers.map((item) => marketService.getStockPrice(item)));
-      setQuotes(priceResults);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Unable to load watchlist.'));
-    } finally {
-      setLoading(false);
-    }
+  async function refreshWatchlist() {
+    const watchlist = await watchlistService.list();
+    setSymbols(watchlist.tickers);
+    const quoteResults = await Promise.allSettled(watchlist.tickers.map((ticker) => marketService.getStockPrice(ticker)));
+    setQuotes(quoteResults.filter((item): item is PromiseFulfilledResult<LiveQuote> => item.status === 'fulfilled').map((item) => item.value));
   }
 
   useEffect(() => {
-    void loadWatchlist();
+    Promise.allSettled([refreshWatchlist(), marketService.getMarketSummary(), marketService.getLiveRibbon()]).then((results) => {
+      const summaryResult = results[1];
+      const ribbonResult = results[2];
+      if (summaryResult.status === 'fulfilled') setMarketSummary(summaryResult.value);
+      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks.slice(0, 8));
+    });
   }, []);
 
-  async function handleAdd(event: React.FormEvent) {
+  async function handleAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!ticker.trim()) {
-      showToast({ title: 'Ticker required', description: 'Enter a symbol to add to the watchlist.', variant: 'error' });
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      await watchlistService.add(ticker.trim().toUpperCase());
-      setTicker('');
-      showToast({ title: 'Watchlist updated', description: 'The ticker was added successfully.', variant: 'success' });
-      await loadWatchlist();
-    } catch (err) {
-      showToast({ title: 'Unable to add symbol', description: getErrorMessage(err), variant: 'error' });
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleRemove(symbol: string) {
-    try {
-      await watchlistService.remove(symbol);
-      showToast({ title: 'Removed from watchlist', description: `${symbol} was removed.`, variant: 'success' });
-      await loadWatchlist();
-    } catch (err) {
-      showToast({ title: 'Unable to remove symbol', description: getErrorMessage(err), variant: 'error' });
-    }
+    if (!symbolInput.trim()) return;
+    await watchlistService.add(symbolInput.trim().toUpperCase());
+    setSymbolInput('');
+    await refreshWatchlist();
   }
 
   return (
-    <ProtectedShell>
-      <AppShell
-        currentPage="watchlist"
-        title="Watchlist"
-        description="Track symbols you care about with live quote widgets and direct links to the details page."
-        actions={<Button variant="outline" onClick={() => void loadWatchlist()}>Refresh</Button>}
-      >
-        <SurfaceCard>
-          <form className="flex flex-col gap-3 md:flex-row" onSubmit={handleAdd}>
-            <Input label="Add Symbol" value={ticker} onChange={(event) => setTicker(event.target.value)} className="md:flex-1" />
-            <Button type="submit" isLoading={submitting} className="md:self-end">Add to Watchlist</Button>
-          </form>
-        </SurfaceCard>
-        {loading ? (
-          <LoadingState label="Loading watchlist..." />
-        ) : error ? (
-          <ErrorState message={error} onRetry={() => void loadWatchlist()} />
-        ) : !quotes.length ? (
-          <EmptyState title="Watchlist is empty" message="Add a stock symbol to begin monitoring live prices." />
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {quotes.map((quote) => (
-              <SurfaceCard key={quote.symbol}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-2xl font-black text-white">{quote.symbol}</p>
-                    <p className="mt-2 text-on-surface-variant">{formatCurrency(quote.price)}</p>
+    <ProtectedScreen>
+      <SentinelShell title="Main Watchlist" subtitle={`Real-time monitoring of ${symbols.length} selected assets`} ribbon={ribbon}>
+        <div className="grid grid-cols-12 gap-6">
+          <SurfaceCard className="col-span-12 overflow-hidden lg:col-span-8">
+            <div className="flex items-center justify-between px-6 py-5">
+              <div className="flex gap-3">
+                <button className="rounded-xl bg-[var(--surface-high)] px-5 py-3 text-sm font-bold text-white">Filter</button>
+                <form onSubmit={handleAdd} className="flex gap-3">
+                  <input value={symbolInput} onChange={(event) => setSymbolInput(event.target.value)} className="rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm text-white outline-none" placeholder="Add symbol" />
+                  <button className="rounded-xl bg-[linear-gradient(135deg,#adc6ff_0%,#4d8eff_100%)] px-5 py-3 text-sm font-bold text-[var(--on-primary)]">Add Symbol</button>
+                </form>
+              </div>
+            </div>
+            <table className="w-full">
+              <thead className="text-[10px] uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">
+                <tr>
+                  <th className="px-6 py-4 text-left">Symbol</th>
+                  <th className="px-6 py-4 text-left">Price</th>
+                  <th className="px-6 py-4 text-left">Change %</th>
+                  <th className="px-6 py-4 text-left">Volume</th>
+                </tr>
+              </thead>
+              <tbody>
+                {quotes.map((quote) => (
+                  <tr key={quote.symbol} className="border-t border-white/5">
+                    <td className="px-6 py-5">
+                      <p className="font-bold text-white">{quote.symbol}</p>
+                      <p className="text-[10px] text-[var(--on-surface-variant)]">NASDAQ</p>
+                    </td>
+                    <td className="px-6 py-5 font-mono text-white">{formatCurrency(quote.price)}</td>
+                    <td className={`px-6 py-5 font-mono ${quote.change_percent >= 0 ? 'text-secondary' : 'text-tertiary'}`}>{formatPercent(quote.change_percent)}</td>
+                    <td className="px-6 py-5 font-mono text-[var(--on-surface-variant)]">{formatCompactNumber(quote.volume)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SurfaceCard>
+          <div className="col-span-12 space-y-5 lg:col-span-4">
+            <SurfaceCard className="p-5">
+              <h3 className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-white">Top Gainers</h3>
+              <div className="space-y-4">
+                {marketSummary?.top_gainers.slice(0, 5).map((item) => (
+                  <div key={item.symbol} className="flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-white">{item.symbol}</p>
+                      <p className="text-[10px] text-[var(--on-surface-variant)]">Live market</p>
+                    </div>
+                    <span className="font-mono text-secondary">{formatPercent(item.change_percent)}</span>
                   </div>
-                  <p className={`text-sm font-semibold ${quote.change_percent >= 0 ? 'text-secondary' : 'text-tertiary'}`}>
-                    {formatPercent(quote.change_percent)}
-                  </p>
-                </div>
-                <div className="mt-5 flex gap-3">
-                  <Button variant="outline" fullWidth asChild>
-                    <Link href={`/stocks/${quote.symbol}`}>Open Details</Link>
-                  </Button>
-                  <Button variant="ghost" fullWidth onClick={() => void handleRemove(quote.symbol)}>
-                    Remove
-                  </Button>
-                </div>
-              </SurfaceCard>
-            ))}
+                ))}
+              </div>
+            </SurfaceCard>
+            <SurfaceCard className="p-5">
+              <h3 className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-white">Top Losers</h3>
+              <div className="space-y-4">
+                {marketSummary?.top_losers.slice(0, 3).map((item) => (
+                  <div key={item.symbol} className="flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-white">{item.symbol}</p>
+                      <p className="text-[10px] text-[var(--on-surface-variant)]">Live market</p>
+                    </div>
+                    <span className="font-mono text-tertiary">{formatPercent(item.change_percent)}</span>
+                  </div>
+                ))}
+              </div>
+            </SurfaceCard>
           </div>
-        )}
-      </AppShell>
-    </ProtectedShell>
+        </div>
+      </SentinelShell>
+    </ProtectedScreen>
   );
 }

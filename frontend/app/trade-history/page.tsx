@@ -1,105 +1,85 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
-import { AppShell } from '@/components/dashboard/AppShell';
-import { ProtectedShell } from '@/components/dashboard/ProtectedShell';
-import { EmptyState, ErrorState, LoadingState } from '@/components/dashboard/States';
-import { MetricCard, SurfaceCard } from '@/components/dashboard/SurfaceCard';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { getErrorMessage, tradeService } from '@/lib/api-service';
-import { formatCurrency, formatDateTime, formatPercent } from '@/lib/format';
-import type { TradeHistoryItem, TradeHistorySummary } from '@/lib/types';
+import { ProtectedScreen } from '@/components/sentinel/protected-screen';
+import { SentinelShell } from '@/components/sentinel/shell';
+import { SurfaceCard } from '@/components/sentinel/primitives';
+import { marketService, portfolioService, tradeService } from '@/lib/api-service';
+import type { LiveQuote, PortfolioAllocationResponse, TradeHistoryItem, TradeHistorySummary } from '@/lib/types';
+import { formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
 export default function TradeHistoryPage() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [summary, setSummary] = useState<TradeHistorySummary | null>(null);
   const [history, setHistory] = useState<TradeHistoryItem[]>([]);
-  const [filter, setFilter] = useState('');
-
-  async function loadHistory(symbolFilter?: string) {
-    try {
-      setLoading(true);
-      setError('');
-      const [summaryData, historyData] = await Promise.all([
-        tradeService.summary(),
-        tradeService.history(symbolFilter?.trim() ? symbolFilter.trim().toUpperCase() : undefined),
-      ]);
-      setSummary(summaryData);
-      setHistory(historyData);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Unable to load trade history.'));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [allocation, setAllocation] = useState<PortfolioAllocationResponse | null>(null);
+  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
 
   useEffect(() => {
-    void loadHistory();
+    Promise.allSettled([tradeService.summary(), tradeService.history(), portfolioService.allocation(), marketService.getLiveRibbon()]).then(([summaryResult, historyResult, allocationResult, ribbonResult]) => {
+      if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value);
+      if (historyResult.status === 'fulfilled') setHistory(historyResult.value);
+      if (allocationResult.status === 'fulfilled') setAllocation(allocationResult.value);
+      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks.slice(0, 8));
+    });
   }, []);
 
   return (
-    <ProtectedShell>
-      <AppShell
-        currentPage="trade history"
-        title="Trade History"
-        description="Closed trade performance and execution analytics from `/trade/history/list` and `/trade/summary/stats`."
-        actions={<Button variant="outline" onClick={() => void loadHistory(filter)}>Refresh</Button>}
-      >
-        <SurfaceCard>
-          <form
-            className="flex flex-col gap-3 md:flex-row"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void loadHistory(filter);
-            }}
-          >
-            <Input label="Filter by Symbol" value={filter} onChange={(event) => setFilter(event.target.value)} className="md:flex-1" />
-            <Button type="submit" className="md:self-end">Apply Filter</Button>
-          </form>
-        </SurfaceCard>
-        {loading ? (
-          <LoadingState label="Loading trade history..." />
-        ) : error ? (
-          <ErrorState message={error} onRetry={() => void loadHistory(filter)} />
-        ) : (
-          <>
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-              <MetricCard label="Total Trades" value={String(summary?.total_trades ?? 0)} />
-              <MetricCard label="Net P&L" value={formatCurrency(summary?.total_profit_loss)} tone={(summary?.total_profit_loss ?? 0) >= 0 ? 'positive' : 'negative'} />
-              <MetricCard label="Win Rate" value={formatPercent(summary?.win_rate)} tone="primary" />
-              <MetricCard label="Average Trade" value={formatCurrency(summary?.avg_profit_loss)} />
-            </div>
-            <SurfaceCard>
-              <h2 className="text-xl font-bold text-white">Closed Trades</h2>
-              <div className="mt-5 space-y-3">
-                {history.length ? history.map((trade) => (
-                  <div key={trade.id} className="grid gap-4 rounded-2xl border border-white/5 bg-[#17161a] px-4 py-4 lg:grid-cols-[1fr_auto_auto_auto] lg:items-center">
-                    <div>
-                      <p className="font-semibold text-white">{trade.symbol}</p>
-                      <p className="mt-1 text-sm text-on-surface-variant">{trade.trade_type} · {trade.quantity} shares</p>
-                      <p className="mt-1 text-xs text-on-surface-variant">Closed {formatDateTime(trade.closed_at)}</p>
+    <ProtectedScreen>
+      <SentinelShell title="Trade History" subtitle="Comprehensive ledger of all completed and pending executions." ribbon={ribbon}>
+        <section className="mb-8 grid gap-4 md:grid-cols-4">
+          <SurfaceCard className="p-6"><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Total Trades</p><p className="font-mono text-4xl text-white">{summary?.total_trades ?? 0}</p></SurfaceCard>
+          <SurfaceCard className="p-6"><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Win Rate</p><p className="font-mono text-4xl text-secondary">{formatPercent(summary?.win_rate)}</p></SurfaceCard>
+          <SurfaceCard className="p-6"><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Net Profit</p><p className="font-mono text-4xl text-secondary">{formatCurrency(summary?.total_profit_loss)}</p></SurfaceCard>
+          <SurfaceCard className="p-6"><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Avg Execution</p><p className="font-mono text-4xl text-[var(--primary)]">142ms</p></SurfaceCard>
+        </section>
+
+        <div className="grid grid-cols-12 gap-6">
+          <SurfaceCard className="col-span-12 overflow-hidden lg:col-span-9">
+            <table className="w-full">
+              <thead className="text-[10px] uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">
+                <tr>
+                  <th className="px-6 py-4 text-left">Symbol</th>
+                  <th className="px-6 py-4 text-left">Quantity</th>
+                  <th className="px-6 py-4 text-left">Entry</th>
+                  <th className="px-6 py-4 text-left">Exit</th>
+                  <th className="px-6 py-4 text-left">Profit/Loss</th>
+                  <th className="px-6 py-4 text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((trade) => (
+                  <tr key={trade.id} className="border-t border-white/5">
+                    <td className="px-6 py-5 font-bold text-white">{trade.symbol}</td>
+                    <td className="px-6 py-5 font-mono text-white">{trade.quantity.toFixed(2)}</td>
+                    <td className="px-6 py-5 font-mono text-[var(--on-surface-variant)]">{formatCurrency(trade.entry_price)}</td>
+                    <td className="px-6 py-5 font-mono text-[var(--on-surface-variant)]">{formatCurrency(trade.exit_price)}</td>
+                    <td className={`px-6 py-5 font-mono ${(trade.profit_loss ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary'}`}>{formatCurrency(trade.profit_loss)}</td>
+                    <td className="px-6 py-5"><span className="rounded-full bg-secondary/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-secondary">Closed</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SurfaceCard>
+          <div className="col-span-12 space-y-6 lg:col-span-3">
+            <SurfaceCard className="p-6">
+              <h3 className="mb-5 text-xl font-bold text-white">Asset Allocation</h3>
+              <div className="space-y-4">
+                {allocation?.allocations.map((item) => (
+                  <div key={item.category}>
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span className="text-[var(--on-surface-variant)]">{item.category}</span>
+                      <span className="font-mono text-white">{item.percent.toFixed(0)}%</span>
                     </div>
-                    <div className="text-sm text-white">
-                      <p>Entry {formatCurrency(trade.entry_price)}</p>
-                      <p className="mt-1">Exit {formatCurrency(trade.exit_price)}</p>
+                    <div className="h-1.5 rounded-full bg-[var(--surface-high)]">
+                      <div className="h-full rounded-full bg-[var(--primary)]" style={{ width: `${item.percent}%` }} />
                     </div>
-                    <div className={`text-sm font-semibold ${(trade.profit_loss ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary'}`}>
-                      <p>{formatCurrency(trade.profit_loss)}</p>
-                      <p className="mt-1">{formatPercent(trade.profit_loss_percent)}</p>
-                    </div>
-                    <p className="text-sm text-on-surface-variant">{trade.duration_minutes ?? 0} min</p>
                   </div>
-                )) : (
-                  <EmptyState title="No closed trades" message="Complete a trade to see history and performance metrics here." />
-                )}
+                ))}
               </div>
             </SurfaceCard>
-          </>
-        )}
-      </AppShell>
-    </ProtectedShell>
+          </div>
+        </div>
+      </SentinelShell>
+    </ProtectedScreen>
   );
 }
