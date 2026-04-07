@@ -358,7 +358,7 @@ export function SentinelShell({
                 className={cn(
                   'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-300',
                   active
-                    ? 'translate-x-1 border-r-2 border-[var(--primary)] bg-[var(--surface-bright)] font-bold text-white'
+                    ? 'translate-x-1 border-r-2 border-[var(--primary)] bg-[#4da6ff]/20 shadow-[0_0_10px_rgba(77,166,255,0.5)] font-bold text-white'
                     : 'text-[var(--on-surface-variant)] hover:bg-[var(--surface-high)] hover:text-white',
                 )}
               >
