@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db_session
 from app.api.routes.stock import fetch_stock_quote
+from app.api.routes.search import _finnhub_symbol_search
 from app.models.user import User
 from app.models.portfolio import Portfolio
 
@@ -290,6 +291,24 @@ def add_or_update_position(
     logger.info("Portfolio add/update requested", extra={"user_id": current_user.id, "ticker": ticker_upper})
     if not ticker_upper:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ticker cannot be empty")
+
+    # ── Symbol validation against Finnhub ──────────────────────────────
+    try:
+        search_results = _finnhub_symbol_search(ticker_upper)
+    except HTTPException:
+        # If the search service is unavailable, let it through (fail-open)
+        search_results = [{"symbol": ticker_upper}]
+
+    matched = any(
+        str(r.get("symbol", "") or r.get("displaySymbol", "")).upper() == ticker_upper
+        for r in search_results
+    )
+    if not matched:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{ticker_upper}' is not a recognised stock or crypto symbol. Please search and select a valid symbol.",
+        )
+    # ──────────────────────────────────────────────────────────────────
 
     existing = (
         db.query(Portfolio)

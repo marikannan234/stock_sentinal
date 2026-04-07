@@ -8,37 +8,86 @@ import { marketService, newsService } from '@/lib/api-service';
 import type { LiveQuote, NewsArticle } from '@/lib/types';
 import { formatRelativeTime } from '@/lib/sentinel-utils';
 
+function sentimentBadge(sentiment?: string | null) {
+  if (!sentiment) return null;
+  const s = sentiment.toLowerCase();
+  const cls =
+    s === 'positive' || s === 'bullish'
+      ? 'bg-secondary/10 text-secondary'
+      : s === 'negative' || s === 'bearish'
+        ? 'bg-tertiary/10 text-tertiary'
+        : 'bg-[var(--surface-high)] text-[var(--on-surface-variant)]';
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.15em] ${cls}`}>
+      {sentiment}
+    </span>
+  );
+}
+
 export default function NewsPage() {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.allSettled([newsService.global(12), marketService.getLiveRibbon()]).then(([newsResult, ribbonResult]) => {
-      if (newsResult.status === 'fulfilled') setArticles(newsResult.value.articles);
-      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks.slice(0, 8));
+    Promise.allSettled([newsService.global(20), marketService.getLiveRibbon()]).then(([newsResult, ribbonResult]) => {
+      if (newsResult.status === 'fulfilled') {
+        setArticles(newsResult.value.articles);
+      } else {
+        setError('Failed to load news. Please try again.');
+      }
+      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks);
     });
   }, []);
 
   return (
     <ProtectedScreen>
       <SentinelShell title="News Intelligence" subtitle="Live market briefings from the backend news feed." ribbon={ribbon}>
-        <div className="grid gap-6 lg:grid-cols-2">
-          {articles.map((article, index) => (
-            <SurfaceCard key={`${article.url}-${index}`} className="overflow-hidden">
-              <div className="p-6">
-                <p className="mb-3 text-[10px] font-black uppercase tracking-[0.22em] text-[var(--primary)]">{article.source}</p>
-                <h2 className="mb-3 text-2xl font-bold tracking-[-0.04em] text-white">{article.title}</h2>
-                <p className="text-sm leading-7 text-[var(--on-surface-variant)]">{article.summary || 'Latest market briefing from the live feed.'}</p>
-                <div className="mt-6 flex items-center justify-between">
-                  <span className="text-xs uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">{formatRelativeTime(article.published_at)}</span>
-                  <a href={article.url} target="_blank" rel="noreferrer" className="text-xs font-black uppercase tracking-[0.18em] text-[var(--primary)]">
-                    Read Source
+        {error ? (
+          <div className="flex min-h-[30vh] items-center justify-center">
+            <p className="text-sm text-tertiary">{error}</p>
+          </div>
+        ) : articles.length === 0 ? (
+          <div className="flex min-h-[30vh] items-center justify-center">
+            <p className="text-sm text-[var(--on-surface-variant)]">Loading news…</p>
+          </div>
+        ) : (
+          <div className="grid gap-5 lg:grid-cols-2">
+            {articles.map((article, index) => (
+              <SurfaceCard key={`${article.url}-${index}`} className="overflow-hidden hover:border-white/10 transition-colors">
+                <div className="p-5">
+                  {/* Source + Sentiment */}
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--primary)]">{article.source}</p>
+                    {sentimentBadge(article.sentiment)}
+                  </div>
+                  {/* Title */}
+                  <a href={article.url} target="_blank" rel="noreferrer" className="block">
+                    <h2 className="mb-2 text-base font-bold leading-snug text-white hover:text-[var(--primary)] transition-colors">
+                      {article.title}
+                    </h2>
                   </a>
+                  {/* Summary */}
+                  {article.summary && (
+                    <p className="mb-4 text-sm leading-6 text-[var(--on-surface-variant)] line-clamp-3">{article.summary}</p>
+                  )}
+                  {/* Footer */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-[var(--on-surface-variant)]">{formatRelativeTime(article.published_at)}</span>
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-black uppercase tracking-[0.18em] text-[var(--primary)] hover:opacity-80"
+                    >
+                      Read →
+                    </a>
+                  </div>
                 </div>
-              </div>
-            </SurfaceCard>
-          ))}
-        </div>
+              </SurfaceCard>
+            ))}
+          </div>
+        )}
       </SentinelShell>
     </ProtectedScreen>
   );

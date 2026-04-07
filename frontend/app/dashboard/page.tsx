@@ -1,13 +1,18 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelLineChart } from '@/components/sentinel/charts';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { Icon, StatChip, SurfaceCard } from '@/components/sentinel/primitives';
-import { alertService, marketService, newsService, portfolioService } from '@/lib/api-service';
-import type { AlertItem, LiveQuote, MarketSummary, NewsArticle, PortfolioGrowthPoint, PortfolioSummary } from '@/lib/types';
+import { marketService, newsService, portfolioService } from '@/lib/api-service';
+import type { LiveQuote, MarketSummary, NewsArticle, PortfolioGrowthPoint, PortfolioSummary } from '@/lib/types';
 import { formatCurrency, formatPercent } from '@/lib/sentinel-utils';
+
+const dashRanges = ['1D', '1W', '1M', '1Y'] as const;
+type DashRange = typeof dashRanges[number];
+const rangeMap: Record<DashRange, '1d' | '1w' | '1m' | '1y'> = { '1D': '1d', '1W': '1w', '1M': '1m', '1Y': '1y' };
 
 export default function DashboardPage() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
@@ -15,7 +20,7 @@ export default function DashboardPage() {
   const [market, setMarket] = useState<MarketSummary | null>(null);
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [growth, setGrowth] = useState<PortfolioGrowthPoint[]>([]);
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [activeRange, setActiveRange] = useState<DashRange>('1D');
 
   useEffect(() => {
     Promise.allSettled([
@@ -23,19 +28,19 @@ export default function DashboardPage() {
       marketService.getLiveRibbon(),
       marketService.getMarketSummary(),
       newsService.global(3),
-      portfolioService.growth('1d'),
-      alertService.list(),
-    ]).then(([summaryResult, ribbonResult, marketResult, newsResult, growthResult, alertsResult]) => {
+    ]).then(([summaryResult, ribbonResult, marketResult, newsResult]) => {
       if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value);
-      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks.slice(0, 8));
+      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks);
       if (marketResult.status === 'fulfilled') setMarket(marketResult.value);
       if (newsResult.status === 'fulfilled') setNews(newsResult.value.articles.slice(0, 3));
-      if (growthResult.status === 'fulfilled') setGrowth(growthResult.value);
-      if (alertsResult.status === 'fulfilled') setAlerts(alertsResult.value);
     });
   }, []);
 
-  const movers = market ? [...market.top_gainers.slice(0, 2), ...market.top_losers.slice(0, 1)] : [];
+  useEffect(() => {
+    portfolioService.growth(rangeMap[activeRange]).then(setGrowth).catch(() => setGrowth([]));
+  }, [activeRange]);
+
+  const movers = market ? [...(market.top_gainers ?? []).slice(0, 2), ...(market.top_losers ?? []).slice(0, 1)] : [];
 
   return (
     <ProtectedScreen>
@@ -48,7 +53,7 @@ export default function DashboardPage() {
                 <div className="mb-10 flex items-start justify-between gap-4">
                   <div>
                     <p className="mb-2 text-xs uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Portfolio Net Worth</p>
-                    <h1 className="font-mono text-[62px] font-medium tracking-[-0.08em] text-white">
+                    <h1 className="font-mono text-[48px] font-medium tracking-[-0.07em] text-white">
                       {formatCurrency(summary?.current_value ?? 0)}
                     </h1>
                   </div>
@@ -71,8 +76,12 @@ export default function DashboardPage() {
                   <p className="text-xs text-[var(--on-surface-variant)]">Live movement snapshot</p>
                 </div>
                 <div className="flex rounded-xl bg-[var(--surface-lowest)] p-1 text-xs font-bold">
-                  {['1D', '1W', '1M', '1Y'].map((range, index) => (
-                    <button key={range} className={index === 0 ? 'rounded-lg bg-[var(--surface-highest)] px-3 py-1 text-white' : 'px-3 py-1 text-[var(--on-surface-variant)]'}>
+                  {dashRanges.map((range) => (
+                    <button
+                      key={range}
+                      onClick={() => setActiveRange(range)}
+                      className={range === activeRange ? 'rounded-lg bg-[var(--surface-highest)] px-3 py-1 text-white' : 'px-3 py-1 text-[var(--on-surface-variant)] hover:text-white'}
+                    >
                       {range}
                     </button>
                   ))}
@@ -91,10 +100,12 @@ export default function DashboardPage() {
                 <Icon name="more_horiz" className="text-[18px] text-[var(--on-surface-variant)]" />
               </div>
               <div className="space-y-3">
-                {movers.map((item) => (
-                  <div key={item.symbol} className="flex items-center justify-between rounded-2xl px-2 py-2 hover:bg-[var(--surface-high)]">
+                {movers.length === 0 ? (
+                  <p className="text-xs text-[var(--on-surface-variant)]">Loading movers…</p>
+                ) : movers.map((item) => (
+                  <Link key={item.symbol} href={`/stocks/${item.symbol}`} className="flex items-center justify-between rounded-2xl px-2 py-2 hover:bg-[var(--surface-high)] transition-colors">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-high)] font-bold text-[var(--primary)]">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-high)] text-sm font-bold text-[var(--primary)]">
                         {item.symbol[0]}
                       </div>
                       <div>
@@ -106,7 +117,7 @@ export default function DashboardPage() {
                       <p className="text-sm text-white">{formatCurrency(item.price)}</p>
                       <p className={item.change_percent >= 0 ? 'text-[10px] text-secondary' : 'text-[10px] text-tertiary'}>{formatPercent(item.change_percent)}</p>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </SurfaceCard>
@@ -125,25 +136,25 @@ export default function DashboardPage() {
             </SurfaceCard>
 
             <SurfaceCard className="p-6">
-              <h2 className="mb-4 text-sm font-bold text-white">Quick Execution</h2>
-              <div className="mb-4 grid grid-cols-2 gap-2">
-                <button className="rounded-xl border border-secondary/20 bg-secondary/10 py-2 text-xs font-black uppercase tracking-[0.22em] text-secondary">Buy</button>
-                <button className="rounded-xl border border-tertiary/20 bg-tertiary/10 py-2 text-xs font-black uppercase tracking-[0.22em] text-tertiary">Sell</button>
+              <h2 className="mb-4 text-sm font-bold text-white">Quick Links</h2>
+              <div className="space-y-2">
+                <Link href="/portfolio" className="flex items-center gap-3 rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--surface-high)] transition-colors">
+                  <span className="material-symbols-outlined text-[18px] text-[var(--primary)]">pie_chart</span>
+                  Portfolio
+                </Link>
+                <Link href="/alerts" className="flex items-center gap-3 rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--surface-high)] transition-colors">
+                  <span className="material-symbols-outlined text-[18px] text-[var(--primary)]">notifications_active</span>
+                  Manage Alerts
+                </Link>
+                <Link href="/news" className="flex items-center gap-3 rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--surface-high)] transition-colors">
+                  <span className="material-symbols-outlined text-[18px] text-[var(--primary)]">article</span>
+                  News Feed
+                </Link>
+                <Link href="/trade-history" className="flex items-center gap-3 rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--surface-high)] transition-colors">
+                  <span className="material-symbols-outlined text-[18px] text-[var(--primary)]">history</span>
+                  Trade History
+                </Link>
               </div>
-              <div className="space-y-3">
-                <div className="rounded-xl bg-[var(--surface-lowest)] px-4 py-3">
-                  <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">Asset</p>
-                  <p className="font-mono text-white">{movers[0]?.symbol ?? 'NVDA'}</p>
-                </div>
-                <div className="rounded-xl bg-[var(--surface-lowest)] px-4 py-3">
-                  <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">Quantity</p>
-                  <p className="font-mono text-white">0.00</p>
-                </div>
-                <button className="w-full rounded-2xl bg-[linear-gradient(135deg,#adc6ff_0%,#4d8eff_100%)] px-4 py-4 text-sm font-black text-[var(--on-primary)]">
-                  Review Order
-                </button>
-              </div>
-              {alerts.length ? <p className="mt-4 text-[11px] uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">{alerts.filter((alert) => alert.is_active).length} active alerts online</p> : null}
             </SurfaceCard>
           </aside>
         </div>
