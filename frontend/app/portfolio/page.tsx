@@ -7,7 +7,7 @@ import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard, Icon } from '@/components/sentinel/primitives';
 import { marketService, portfolioService, getErrorMessage } from '@/lib/api-service';
 import type { LiveQuote, PortfolioAllocationResponse, PortfolioGrowthPoint, PortfolioHolding, PortfolioSummary, SymbolSearchItem } from '@/lib/types';
-import { formatCurrency, formatPercent } from '@/lib/sentinel-utils';
+import { formatCurrency, formatPercent, exportToCSV } from '@/lib/sentinel-utils';
 
 const ranges: Array<'1d' | '1w' | '1m' | '1y'> = ['1d', '1w', '1m', '1y'];
 
@@ -294,7 +294,13 @@ export default function PortfolioPage() {
           <SurfaceCard className="col-span-12 overflow-hidden lg:col-span-8">
             <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
               <h2 className="text-base font-bold text-white">Portfolio Holdings</h2>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => exportToCSV(holdings, 'portfolio-holdings.csv')}
+                  className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--on-primary)] hover:bg-[var(--primary)]/80"
+                >
+                  Export CSV
+                </button>
                 <span className="rounded-full bg-[var(--surface-high)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">
                   Stocks ({holdings.filter((h) => h.asset_class !== 'Crypto').length})
                 </span>

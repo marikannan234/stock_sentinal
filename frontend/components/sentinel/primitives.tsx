@@ -44,3 +44,9 @@ export function StatChip({
     </div>
   );
 }
+
+export function Skeleton({ className }: { className?: string }) {
+  return (
+    <div className={cn('animate-pulse rounded bg-gray-300/20', className)} />
+  );
+}

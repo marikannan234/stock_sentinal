@@ -6,7 +6,7 @@ import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard } from '@/components/sentinel/primitives';
 import { marketService, portfolioService, tradeService } from '@/lib/api-service';
 import type { LiveQuote, PortfolioAllocationResponse, TradeHistoryItem, TradeHistorySummary } from '@/lib/types';
-import { formatCurrency, formatPercent } from '@/lib/sentinel-utils';
+import { formatCurrency, formatPercent, exportToCSV } from '@/lib/sentinel-utils';
 
 export default function TradeHistoryPage() {
   const [summary, setSummary] = useState<TradeHistorySummary | null>(null);
@@ -35,6 +35,15 @@ export default function TradeHistoryPage() {
 
         <div className="grid grid-cols-12 gap-6">
           <SurfaceCard className="col-span-12 overflow-hidden lg:col-span-9">
+            <div className="flex items-center justify-between p-6 pb-0">
+              <h3 className="text-lg font-bold text-white">Trade History</h3>
+              <button
+                onClick={() => exportToCSV(history, 'trade-history.csv')}
+                className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--on-primary)] hover:bg-[var(--primary)]/80"
+              >
+                Export CSV
+              </button>
+            </div>
             <table className="w-full">
               <thead className="text-[10px] uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">
                 <tr>

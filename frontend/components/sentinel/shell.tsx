@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { Tooltip } from 'react-tooltip';
 import type { AlertItem, LiveQuote, SymbolSearchItem } from '@/lib/types';
 import { cn, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 import { Icon } from './primitives';
@@ -175,7 +176,12 @@ function SearchBar() {
     if (!q.trim()) { setResults([]); setOpen(false); return; }
     setLoading(true);
     marketService.search(q)
-      .then((data) => { setResults(data.slice(0, 8)); setOpen(true); })
+      .then((data) => {
+        const history = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+        const historySuggestions = history.filter((item: string) => item.toLowerCase().includes(q.toLowerCase())).slice(0, 3).map((item: string) => ({ ticker: item, name: 'Recent Search' }));
+        setResults([...historySuggestions, ...data.slice(0, 5)]);
+        setOpen(true);
+      })
       .catch(() => setResults([]))
       .finally(() => setLoading(false));
   }, []);
@@ -191,6 +197,13 @@ function SearchBar() {
     setQuery('');
     setResults([]);
     setOpen(false);
+    // Add to history
+    const history = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+    if (!history.includes(ticker)) {
+      history.unshift(ticker);
+      if (history.length > 10) history.pop();
+      localStorage.setItem('searchHistory', JSON.stringify(history));
+    }
     router.push(`/stocks/${ticker}`);
   }
 
@@ -361,6 +374,8 @@ export function SentinelShell({
                     ? 'translate-x-1 border-r-2 border-[var(--primary)] bg-[#4da6ff]/20 shadow-[0_0_10px_rgba(77,166,255,0.5)] font-bold text-white'
                     : 'text-[var(--on-surface-variant)] hover:bg-[var(--surface-high)] hover:text-white',
                 )}
+                data-tooltip-id="sidebar-tooltip"
+                data-tooltip-content={item.label}
               >
                 <Icon name={item.icon} className="text-[18px] shrink-0" />
                 <span className="truncate">{item.label}</span>
@@ -407,6 +422,7 @@ export function SentinelShell({
           );
         })}
       </nav>
+      <Tooltip id="sidebar-tooltip" place="right" className="z-[1000]" />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelLineChart } from '@/components/sentinel/charts';
 import { SentinelShell } from '@/components/sentinel/shell';
-import { Icon, StatChip, SurfaceCard } from '@/components/sentinel/primitives';
+import { Icon, StatChip, SurfaceCard, Skeleton } from '@/components/sentinel/primitives';
 import { marketService, newsService, portfolioService } from '@/lib/api-service';
 import type { LiveQuote, MarketSummary, NewsArticle, PortfolioGrowthPoint, PortfolioSummary } from '@/lib/types';
 import { formatCurrency, formatPercent } from '@/lib/sentinel-utils';
@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [growth, setGrowth] = useState<PortfolioGrowthPoint[]>([]);
   const [activeRange, setActiveRange] = useState<DashRange>('1D');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.allSettled([
@@ -33,6 +34,7 @@ export default function DashboardPage() {
       if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks);
       if (marketResult.status === 'fulfilled') setMarket(marketResult.value);
       if (newsResult.status === 'fulfilled') setNews(newsResult.value.articles.slice(0, 3));
+      setLoading(false);
     });
   }, []);
 
@@ -54,17 +56,27 @@ export default function DashboardPage() {
                   <div>
                     <p className="mb-2 text-xs uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Portfolio Net Worth</p>
                     <h1 className="font-mono text-[48px] font-medium tracking-[-0.07em] text-white">
-                      {formatCurrency(summary?.current_value ?? 0)}
+                      {loading ? <Skeleton className="h-12 w-48" /> : formatCurrency(summary?.current_value ?? 0)}
                     </h1>
                   </div>
                   <div className="rounded-full bg-[rgba(78,222,163,0.12)] px-3 py-1 text-xs font-bold text-secondary">
-                    {formatPercent(summary?.day_percent ?? 0)}
+                    {loading ? <Skeleton className="h-4 w-12" /> : formatPercent(summary?.day_percent ?? 0)}
                   </div>
                 </div>
                 <div className="grid gap-6 md:grid-cols-3">
-                  <StatChip label="Today's P&L" value={formatCurrency(summary?.day_pl ?? 0)} tone={(summary?.day_pl ?? 0) >= 0 ? 'positive' : 'negative'} />
-                  <StatChip label="Buying Power" value={formatCurrency(summary?.buying_power ?? 0)} />
-                  <StatChip label="Total Return" value={formatPercent(summary?.percent_pl ?? 0)} tone={(summary?.percent_pl ?? 0) >= 0 ? 'positive' : 'negative'} />
+                  {loading ? (
+                    <>
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                    </>
+                  ) : (
+                    <>
+                      <StatChip label="Today's P&L" value={formatCurrency(summary?.day_pl ?? 0)} tone={(summary?.day_pl ?? 0) >= 0 ? 'positive' : 'negative'} />
+                      <StatChip label="Buying Power" value={formatCurrency(summary?.buying_power ?? 0)} />
+                      <StatChip label="Total Return" value={formatPercent(summary?.percent_pl ?? 0)} tone={(summary?.percent_pl ?? 0) >= 0 ? 'positive' : 'negative'} />
+                    </>
+                  )}
                 </div>
               </div>
             </SurfaceCard>
@@ -88,7 +100,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="rounded-2xl bg-[rgba(14,14,16,0.34)] p-4">
-                <SentinelLineChart points={growth} accent="#adc6ff" compact />
+                {loading ? <Skeleton className="h-32 w-full" /> : <SentinelLineChart points={growth} accent="#adc6ff" compact />}
               </div>
             </SurfaceCard>
           </section>
@@ -125,7 +137,13 @@ export default function DashboardPage() {
             <SurfaceCard className="p-6">
               <h2 className="mb-5 text-sm font-bold uppercase tracking-[0.18em] text-white">Market News</h2>
               <div className="space-y-5">
-                {news.map((article) => (
+                {loading ? (
+                  <>
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                  </>
+                ) : news.map((article) => (
                   <a key={article.url} href={article.url} target="_blank" rel="noreferrer" className="block">
                     <p className="mb-1 text-[10px] font-black uppercase tracking-[0.22em] text-[var(--primary)]">{article.source}</p>
                     <h3 className="text-sm font-medium leading-6 text-white">{article.title}</h3>
