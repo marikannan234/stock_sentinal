@@ -28,6 +28,7 @@ from app.services.scheduler import start_scheduler, stop_scheduler
 # Then import routes
 from app.api.routes import auth as auth_routes
 from app.api.routes import health as health_routes
+from app.api.routes import dashboard as dashboard_routes
 from app.api.routes import indicator as indicator_routes
 from app.api.routes import news as news_routes
 from app.api.routes import portfolio as portfolio_routes
@@ -139,7 +140,10 @@ if "http://localhost:3000" not in cors_origins:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -153,7 +157,8 @@ logger.info(f"CORS configured with origins: {cors_origins}")
 # ============================================
 app.include_router(health_routes.router, prefix="/api", tags=["health"])
 app.include_router(auth_routes.router, prefix="/api", tags=["auth"])
-app.include_router(indicator_routes.router, prefix="/api", tags=["indicators"])
+app.include_router(dashboard_routes.router, prefix="/api", tags=["dashboard"])
+app.include_router(indicator_routes.router, prefix="/api")
 app.include_router(stock_routes.router, prefix="/api", tags=["stock"])
 app.include_router(stocks_extended_routes.router, prefix="/api", tags=["stocks"])
 app.include_router(news_routes.router, prefix="/api", tags=["news"])
@@ -168,4 +173,21 @@ app.include_router(trading_routes.router, prefix="/api", tags=["trading"])
 app.include_router(websocket_routes.router, tags=["websocket"])
 
 logger.info(f"All routes registered ({settings.APP_NAME} is ready to serve requests)")
+
+# ============================================
+# Debug: Print indicator route (simplified)
+# ============================================
+logger.info("Checking for /api/indicators/combined endpoint...")
+try:
+    from fastapi.routing import APIRoute
+    indicator_found = False
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            if '/indicators/combined' in route.path:
+                logger.info(f"✅ Route found: {route.path} {route.methods}")
+                indicator_found = True
+    if not indicator_found:
+        logger.warning("❌ /indicators/combined route not found")
+except Exception as e:
+    logger.debug(f"Could not check routes: {e}")
 

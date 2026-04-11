@@ -53,13 +53,18 @@ export function getErrorMessage(error: unknown, fallback = 'Something went wrong
 }
 
 export const authService = {
-  async login(email: string, password: string) {
-    const { data } = await api.post<LoginResponse>('/auth/login-json', { email, password });
+  async login(emailOrPhone: string, password: string) {
+    const { data } = await api.post<LoginResponse>('/auth/login-json', {
+      email: emailOrPhone.includes('@') ? emailOrPhone : null,
+      phone: !emailOrPhone.includes('@') ? emailOrPhone : null,
+      password,
+    });
     return data;
   },
-  async register(email: string, password: string, fullName?: string) {
-    const payload: { email: string; password: string; full_name?: string } = { email, password };
+  async register(email: string, password: string, fullName?: string, whatsappPhone?: string) {
+    const payload: { email: string; password: string; full_name?: string; whatsapp_phone?: string } = { email, password };
     if (fullName?.trim()) payload.full_name = fullName.trim();
+    if (whatsappPhone?.trim()) payload.whatsapp_phone = whatsappPhone.trim();
     const { data } = await api.post<UserProfile>('/auth/register', payload);
     return data;
   },
@@ -242,6 +247,10 @@ export const tradeService = {
   },
   async history(symbolFilter?: string) {
     const { data } = await api.get<TradeHistoryItem[]>('/trade/history/list', { params: { symbol_filter: symbolFilter } });
+    return data;
+  },
+  async historySummary() {
+    const { data } = await api.get<TradeHistorySummary>('/trade/history/summary');
     return data;
   },
   async summary() {

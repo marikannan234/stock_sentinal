@@ -1,4 +1,4 @@
-// File: D:\stock sentinal\frontend\app\(auth)\premium\page.tsx
+// File: C:\Users\acer\Downloads\stock sentinal\frontend\app\(auth)\premium\page.tsx
 import * as entry from '../../../../../app/(auth)/premium/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

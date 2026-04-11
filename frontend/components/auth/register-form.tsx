@@ -11,6 +11,7 @@ export function RegisterForm() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [whatsappPhone, setWhatsappPhone] = useState('');
 
   useEffect(() => {
     if (token) router.replace('/dashboard');
@@ -20,7 +21,7 @@ export function RegisterForm() {
     event.preventDefault();
     clearError();
     try {
-      await register(email, password, fullName);
+      await register(email, password, fullName, whatsappPhone);
       router.replace('/dashboard');
     } catch {
       return;
@@ -36,6 +37,10 @@ export function RegisterForm() {
       <div>
         <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Email Address</label>
         <input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-white/5 bg-[var(--surface-high)] px-4 py-4 text-white outline-none placeholder:text-[var(--on-surface-variant)]" placeholder="name@sentinel.com" type="email" required />
+      </div>
+      <div>
+        <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">WhatsApp Phone (Optional)</label>
+        <input value={whatsappPhone} onChange={(event) => setWhatsappPhone(event.target.value)} className="w-full rounded-xl border border-white/5 bg-[var(--surface-high)] px-4 py-4 text-white outline-none placeholder:text-[var(--on-surface-variant)]" placeholder="+919876543210" type="tel" />
       </div>
       <div>
         <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Password</label>

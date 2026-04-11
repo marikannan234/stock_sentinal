@@ -5,7 +5,9 @@ import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { AllocationDonut, SentinelLineChart } from '@/components/sentinel/charts';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard, Icon } from '@/components/sentinel/primitives';
+import { ErrorBoundary } from '@/components/sentinel/error-boundary';
 import { marketService, portfolioService, getErrorMessage } from '@/lib/api-service';
+import { useWebSocketPrices } from '@/hooks/useWebSocketPrices';
 import type { LiveQuote, PortfolioAllocationResponse, PortfolioGrowthPoint, PortfolioHolding, PortfolioSummary, SymbolSearchItem } from '@/lib/types';
 import { formatCurrency, formatPercent, exportToCSV } from '@/lib/sentinel-utils';
 
@@ -18,6 +20,8 @@ export default function PortfolioPage() {
   const [growth, setGrowth] = useState<PortfolioGrowthPoint[]>([]);
   const [range, setRange] = useState<'1d' | '1w' | '1m' | '1y'>('1y');
   const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
+  const [loadingPortfolio, setLoadingPortfolio] = useState(true);
+  const [loadingGrowth, setLoadingGrowth] = useState(false);
 
   // Add Holding form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -48,13 +52,26 @@ export default function PortfolioPage() {
     return () => document.removeEventListener('mousedown', onDown);
   }, []);
 
+  // Cache for symbol search results to avoid duplicate API calls
+  const searchCacheRef = useRef<Record<string, SymbolSearchItem[]>>({});
+  
   const searchSymbols = useCallback((q: string) => {
     if (!q.trim()) { setSymbolSuggestions([]); setSymbolDropdownOpen(false); return; }
+    
+    // Return cached results if available (avoid duplicate API calls)
+    if (searchCacheRef.current[q]) {
+      setSymbolSuggestions(searchCacheRef.current[q]);
+      setSymbolDropdownOpen(true);
+      return;
+    }
+    
     setSymbolSearching(true);
     marketService.search(q)
       .then((results) => {
-        setSymbolSuggestions(results.slice(0, 8));
-        setSymbolDropdownOpen(results.length > 0);
+        const sliced = results.slice(0, 8);
+        searchCacheRef.current[q] = sliced; // Cache the result
+        setSymbolSuggestions(sliced);
+        setSymbolDropdownOpen(sliced.length > 0);
       })
       .catch(() => setSymbolSuggestions([]))
       .finally(() => setSymbolSearching(false));
@@ -90,26 +107,113 @@ export default function PortfolioPage() {
     setAddError('');
   }
 
+  // Parallel API calls (Performance: Promise.all instead of sequential)
   async function loadPortfolio() {
-    const [summaryResult, holdingsResult, allocationResult] = await Promise.allSettled([
-      portfolioService.summary(),
-      portfolioService.list(),
-      portfolioService.allocation(),
-    ]);
-    if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value);
-    if (holdingsResult.status === 'fulfilled') setHoldings(holdingsResult.value);
-    if (allocationResult.status === 'fulfilled') setAllocation(allocationResult.value);
+    setLoadingPortfolio(true);
+    try {
+      const [summaryResult, holdingsResult, allocationResult, ribbonResult] = await Promise.all([
+        portfolioService.summary(),
+        portfolioService.list(),
+        portfolioService.allocation(),
+        marketService.getLiveRibbon(),
+      ]);
+      setSummary(summaryResult);
+      setHoldings(holdingsResult);
+      setAllocation(allocationResult);
+      setRibbon(ribbonResult.stocks);
+    } catch (err) {
+      console.error('Failed to load portfolio:', err);
+    } finally {
+      setLoadingPortfolio(false);
+    }
   }
 
   useEffect(() => {
-    Promise.allSettled([loadPortfolio(), marketService.getLiveRibbon()]).then(([, ribbonResult]) => {
-      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks);
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadPortfolio();
   }, []);
 
+  // Load growth data on range change with loading state and caching
+  const growthCacheRef = useRef<Record<string, PortfolioGrowthPoint[]>>({});
+  
   useEffect(() => {
-    portfolioService.growth(range).then(setGrowth).catch(() => setGrowth([]));
+    async function loadGrowthData() {
+      // Return cached data if available (avoid duplicate API calls)
+      if (growthCacheRef.current[range]) {
+        setGrowth(growthCacheRef.current[range]);
+        return;
+      }
+      
+      setLoadingGrowth(true);
+      try {
+        const result = await portfolioService.growth(range);
+        growthCacheRef.current[range] = result; // Cache result for this range
+        setGrowth(result);
+      } catch (err) {
+        console.error('Failed to load growth data:', err);
+        setGrowth([]);
+      } finally {
+        setLoadingGrowth(false);
+      }
+    }
+    loadGrowthData();
+  }, [range]);
+
+  // WebSocket real-time price updates for portfolio holdings
+  // Throttle to prevent excessive re-renders (max 1 update per second per symbol)
+  const lastUpdateRef = useRef<Record<string, number>>({});
+  const throttleDelayMs = 1000;
+  const symbolsToWatch = useMemo(() => holdings.map(h => h.ticker), [holdings]);
+  
+  const handlePriceUpdate = useCallback((update: any) => {
+    const now = Date.now();
+    const lastUpdate = lastUpdateRef.current[update.symbol] || 0;
+    
+    // Skip if updated within throttle window
+    if (now - lastUpdate < throttleDelayMs) return;
+    lastUpdateRef.current[update.symbol] = now;
+    
+    // Selective update: only change the specific holding (avoid full map)
+    setHoldings(prev => {
+      const holdingIndex = prev.findIndex(h => (h.ticker || "").toUpperCase() === (update.symbol || "").toUpperCase());
+      if (holdingIndex === -1) return prev;
+      
+      const updatedHolding = {
+        ...prev[holdingIndex],
+        current_price: update.price,
+        day_change_percent: update.change_percent,
+        // Recalculate P&L based on new price
+        pl_amount: (update.price - prev[holdingIndex].average_price) * prev[holdingIndex].quantity,
+        pl_percent: ((update.price - prev[holdingIndex].average_price) / prev[holdingIndex].average_price) * 100,
+      };
+      
+      // Only return new array if data actually changed
+      if (JSON.stringify(prev[holdingIndex]) === JSON.stringify(updatedHolding)) return prev;
+      
+      const newHoldings = [...prev];
+      newHoldings[holdingIndex] = updatedHolding;
+      return newHoldings;
+    });
+  }, []);
+
+  const { connected: wsConnected } = useWebSocketPrices(
+    symbolsToWatch,
+    handlePriceUpdate,
+    symbolsToWatch.length > 0
+  );
+
+  // Listen for trade completion events to refresh portfolio and growth
+  useEffect(() => {
+    const handleTradeCompleted = () => {
+      // Refresh portfolio data after trade
+      loadPortfolio();
+      // Refresh growth data
+      portfolioService.growth(range)
+        .then(setGrowth)
+        .catch(err => console.error('Failed to refresh growth:', err));
+    };
+
+    window.addEventListener('tradeCompleted', handleTradeCompleted);
+    return () => window.removeEventListener('tradeCompleted', handleTradeCompleted);
   }, [range]);
 
   async function handleAddHolding(e: FormEvent<HTMLFormElement>) {
@@ -144,42 +248,52 @@ export default function PortfolioPage() {
 
   return (
     <ProtectedScreen>
-      <SentinelShell
-        title="Portfolio Overview"
-        subtitle="Real-time valuation and performance metrics."
-        ribbon={ribbon}
-        headerActions={
-          <div className="flex gap-3">
-            <button
-              onClick={() => { setShowAddForm((p) => !p); setAddError(''); }}
-              className="rounded-2xl bg-[linear-gradient(135deg,#adc6ff_0%,#4d8eff_100%)] px-5 py-3 text-sm font-bold text-[var(--on-primary)]"
-            >
-              {showAddForm ? 'Cancel' : 'Add Holding'}
-            </button>
-          </div>
-        }
-      >
+      <ErrorBoundary>
+        <SentinelShell
+          title="Portfolio Overview"
+          subtitle="Real-time valuation and performance metrics."
+          ribbon={ribbon}
+          headerActions={
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowAddForm((p) => !p); setAddError(''); }}
+                className="rounded-2xl bg-[linear-gradient(135deg,#adc6ff_0%,#4d8eff_100%)] px-5 py-3 text-sm font-bold text-[var(--on-primary)]"
+              >
+                {showAddForm ? 'Cancel' : 'Add Holding'}
+              </button>
+            </div>
+          }
+        >
         {/* ── Summary Cards ── */}
         <section className="mb-8 grid gap-4 md:grid-cols-4">
-          {(
-            [
-              ['Total Invested', formatCurrency(summary?.total_invested)],
-              ['Current Value', formatCurrency(summary?.current_value)],
-              ['Overall P&L', `${formatCurrency(summary?.total_pl)} ${formatPercent(summary?.percent_pl)}`],
-              ['Buying Power', formatCurrency(summary?.buying_power)],
-            ] as [string, string][]
-          ).map(([label, value], index) => (
-            <SurfaceCard key={label} className="p-5">
-              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.2em] text-[var(--on-surface-variant)]">{label}</p>
-              <p
-                className={`font-mono text-[28px] font-medium tracking-[-0.05em] ${
+          {loadingPortfolio ? (
+            <>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <SurfaceCard key={i} className="p-5 min-h-[140px] flex flex-col justify-between">
+                  <div className="mb-2 h-3 w-24 animate-pulse rounded bg-[var(--surface-bright)]" />
+                  <div className="h-8 w-32 animate-pulse rounded bg-[var(--surface-bright)]" />
+                </SurfaceCard>
+              ))}
+            </>
+          ) : (
+            (
+              [
+                ['Total Invested', formatCurrency(summary?.total_invested)],
+                ['Current Value', formatCurrency(summary?.current_value)],
+                ['Overall P&L', `${formatCurrency(summary?.total_pl)} ${formatPercent(summary?.percent_pl)}`],
+                ['Buying Power', formatCurrency(summary?.buying_power)],
+              ] as [string, string][]
+            ).map(([label, value], index) => (
+              <SurfaceCard key={label} className="p-5 min-h-[140px] flex flex-col justify-between">
+                <p className="mb-2 text-[11px] font-black uppercase tracking-[0.2em] text-[var(--on-surface-variant)]">{label}</p>
+                <p className={`font-mono text-[28px] font-medium tracking-[-0.05em] transition-all duration-300 ease-out ${
                   index === 2 ? ((summary?.total_pl ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary') : 'text-white'
-                }`}
-              >
-                {value}
-              </p>
-            </SurfaceCard>
-          ))}
+                }`}>
+                  {value}
+                </p>
+              </SurfaceCard>
+            ))
+          )}
         </section>
 
         {/* ── Add Holding Inline Form ── */}
@@ -309,8 +423,23 @@ export default function PortfolioPage() {
                 </span>
               </div>
             </div>
-            {holdings.length === 0 ? (
-              <p className="px-6 py-8 text-sm text-[var(--on-surface-variant)]">No holdings found. Add one above to get started.</p>
+            {loadingPortfolio || holdings.length === 0 ? (
+              loadingPortfolio ? (
+                <div className="space-y-2 p-6">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-4 border-b border-white/5 py-4 px-5">
+                      <div className="h-4 w-12 animate-pulse rounded bg-[var(--surface-bright)]" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 w-24 animate-pulse rounded bg-[var(--surface-bright)]" />
+                        <div className="h-2 w-32 animate-pulse rounded bg-[var(--surface-low)]" />
+                      </div>
+                      <div className="h-4 w-16 animate-pulse rounded bg-[var(--surface-bright)]" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="px-6 py-8 text-sm text-[var(--on-surface-variant)]">No holdings found. Add one above to get started.</p>
+              )
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
@@ -340,10 +469,10 @@ export default function PortfolioPage() {
                           {formatPercent(holding.day_change_percent)}
                         </td>
                         <td className="px-5 py-4 text-right">
-                          <p className={`font-mono text-sm ${(holding.pl_amount ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary'}`}>
+                          <p className={`font-mono text-sm transition-colors duration-300 ${(holding.pl_amount ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary'}`}>
                             {formatCurrency(holding.pl_amount)}
                           </p>
-                          <p className={`font-mono text-[10px] ${(holding.pl_percent ?? 0) >= 0 ? 'text-secondary/80' : 'text-tertiary/80'}`}>
+                          <p className={`font-mono text-[10px] transition-colors duration-300 ${(holding.pl_percent ?? 0) >= 0 ? 'text-secondary/80' : 'text-tertiary/80'}`}>
                             {formatPercent(holding.pl_percent)}
                           </p>
                         </td>
@@ -383,11 +512,11 @@ export default function PortfolioPage() {
         </section>
 
         {/* ── Portfolio Growth ── */}
-        <SurfaceCard className="mt-6 p-6">
+        <SurfaceCard className="relative mt-6 p-6 min-h-[450px]">
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-white">Portfolio Growth</h2>
-              <p className="text-sm text-[var(--on-surface-variant)]">Value tracked over the selected period.</p>
+              <p className="text-sm text-[var(--on-surface-variant)]">Value tracked over the selected period (real data).</p>
             </div>
             <div className="flex rounded-xl bg-[var(--surface-lowest)] p-1">
               {ranges.map((option) => (
@@ -396,18 +525,29 @@ export default function PortfolioPage() {
                   onClick={() => setRange(option)}
                   className={
                     option === range
-                      ? 'rounded-lg bg-[var(--surface-bright)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white'
-                      : 'px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)] hover:text-white'
+                      ? 'rounded-lg bg-[var(--surface-bright)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white transition-colors duration-200'
+                      : 'px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)] hover:text-white transition-colors duration-200'
                   }
                 >
-                  {option.toUpperCase()}
+                  {(option || "").toUpperCase()}
                 </button>
               ))}
             </div>
           </div>
-          <SentinelLineChart points={growth} />
+          <div className={`transition-opacity duration-300 ease-in-out ${loadingGrowth ? 'opacity-50' : 'opacity-100'}`}>
+            <SentinelLineChart points={growth} />
+          </div>
+          {loadingGrowth && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-[rgba(0,0,0,0.3)] backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--primary)] border-r-transparent" />
+                <p className="text-xs text-[var(--on-surface-variant)]">Loading chart...</p>
+              </div>
+            </div>
+          )}
         </SurfaceCard>
       </SentinelShell>
+      </ErrorBoundary>
     </ProtectedScreen>
   );
 }

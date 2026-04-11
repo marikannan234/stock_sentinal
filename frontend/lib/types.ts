@@ -234,12 +234,9 @@ export type TradeHistoryItem = {
 
 export type TradeHistorySummary = {
   total_trades: number;
-  total_profit_loss: number;
   win_rate: number;
-  avg_profit_loss: number;
-  total_invested: number;
-  best_trade?: number | null;
-  worst_trade?: number | null;
+  net_profit: number;
+  avg_execution: number | null;
 };
 
 export type SymbolSearchItem = {

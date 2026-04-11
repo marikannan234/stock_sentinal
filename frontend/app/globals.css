@@ -34,6 +34,7 @@ body {
 }
 
 body {
+  font-family: system-ui, -apple-system, sans-serif;
   color: var(--on-surface);
 }
 
@@ -47,10 +48,6 @@ textarea,
 select,
 button {
   font: inherit;
-}
-
-.material-symbols-outlined {
-  font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
 }
 
 .ticker-wrap {
@@ -79,8 +76,18 @@ button {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .animate-spin {
   animation: spin 1s linear infinite;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-in;
 }
 
 ::-webkit-scrollbar {

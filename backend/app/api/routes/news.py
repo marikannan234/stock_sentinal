@@ -94,20 +94,13 @@ class AnalyzeSentimentRequest(BaseModel):
 # Global News Endpoint
 # ============================================
 @router.get(
-    "",
-    response_model=NewsResponse,
-    summary="Get global market news",
-    description="Fetch latest financial and economic news from around the world.",
-)
-@router.get(
-    "/global",
+    "/",
     response_model=NewsResponse,
     summary="Get global market news",
     description="Fetch latest financial and economic news from around the world.",
 )
 async def get_global_news_endpoint(
     limit: int = Query(30, ge=1, le=100, description="Number of articles to return"),
-    current_user: User = Depends(get_current_user),
 ) -> NewsResponse:
     """
     Get global market news.
@@ -163,7 +156,7 @@ async def get_global_news_endpoint(
 async def get_stock_news_endpoint(
     symbol: str = Path(..., min_length=1, max_length=10, description="Stock ticker symbol (e.g., AAPL)"),
     limit: int = Query(20, ge=1, le=100, description="Number of articles to return"),
-    current_user: User = Depends(get_current_user),
+
 ) -> NewsResponse:
     """
     Get news for a specific stock.
@@ -227,7 +220,6 @@ async def get_stock_news_endpoint(
 async def get_stock_news_with_sentiment(
     symbol: str = Path(..., min_length=1, max_length=10, description="Stock ticker symbol"),
     limit: int = Query(20, ge=1, le=100, description="Number of articles to return"),
-    current_user: User = Depends(get_current_user),
 ) -> NewsWithSentimentResponse:
     """
     Get stock news with AI sentiment analysis and investment recommendations.

@@ -8,6 +8,7 @@ Handles:
   - Alert condition checking
   - Alert triggering and logging
   - Email notifications for triggered alerts
+  - Real-time WebSocket notifications for triggered alerts
 """
 
 import asyncio
@@ -30,104 +31,11 @@ from app.models.alert import Alert, AlertCondition
 from app.models.user import User
 from app.schemas.alert import AlertResponse, CreateAlertRequest, UpdateAlertRequest
 from app.services.indicator_service import calculate_sma, calculate_rsi, calculate_ema
+from app.services.email_smtp import send_alert_notification
+from app.services.whatsapp_service import send_whatsapp_alert, send_whatsapp_notification
+from app.ws.connection_manager import alert_manager
 
 logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# Helper Functions for Async Operations from Sync Context
-# ============================================================================
-
-def send_alert_email_async(
-    user_email: str,
-    symbol: str,
-    current_price: float,
-    condition: str,
-    target_value: float,
-    triggered_at: str,
-    alert_type: str = "price",
-    sma_value: Optional[float] = None,
-    sma_period: Optional[int] = None,
-    ema_value: Optional[float] = None,
-    ema_period: Optional[int] = None,
-    rsi_value: Optional[float] = None,
-    rsi_period: Optional[int] = None,
-) -> None:
-    """
-    Send alert triggered email notification asynchronously from sync context.
-    
-    Since the scheduler runs synchronously, we need to handle async email sending
-    carefully. This function attempts to run the async email function without
-    blocking the scheduler.
-    
-    Args:
-        user_email: User's email address
-        symbol: Stock symbol
-        current_price: Current stock price
-        condition: Alert condition (e.g., ">", "<")
-        target_value: Target price value
-        triggered_at: When alert was triggered (ISO format string)
-        alert_type: Type of alert (for SMA/EMA/RSI/combined alerts)
-        sma_value: SMA value (for SMA alerts)
-        sma_period: SMA period (for SMA alerts)
-        ema_value: EMA value (for EMA alerts and combined signals)
-        ema_period: EMA period (for EMA alerts and combined signals)
-        rsi_value: RSI value (for RSI alerts and combined signals)
-        rsi_period: RSI period (for RSI alerts and combined signals)
-    """
-    try:
-        # Try to get existing event loop
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            # No event loop in current thread, create new one
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        # Import here to avoid circular imports
-        from app.services.email_service import send_alert_triggered_email
-        
-        # Create coroutine
-        coro = send_alert_triggered_email(
-            to_email=user_email,
-            symbol=symbol,
-            current_price=current_price,
-            condition=condition,
-            target_value=target_value,
-            triggered_at=triggered_at,
-            alert_type=alert_type,
-            sma_value=sma_value,
-            sma_period=sma_period,
-            ema_value=ema_value,
-            ema_period=ema_period,
-            rsi_value=rsi_value,
-            rsi_period=rsi_period,
-        )
-        
-        # Try to run using the current loop if it's running
-        # If loop is already running (in async context), schedule as task
-        if loop.is_running():
-            asyncio.create_task(coro)
-        else:
-            # If loop is not running, run until complete
-            loop.run_until_complete(coro)
-        
-        logger.debug(
-            f"Alert email scheduled for async sending",
-            extra={"user_email": user_email, "symbol": symbol},
-        )
-        
-    except Exception as e:
-        logger.error(
-            f"Failed to schedule alert email",
-            extra={
-                "user_email": user_email,
-                "symbol": symbol,
-                "error": str(e),
-                "error_type": type(e).__name__,
-            },
-            exc_info=True,
-        )
 
 class AlertService:
     """Service for managing stock price alerts."""
@@ -881,7 +789,7 @@ def trigger_alert(
         email_sent = False
         if settings.ENABLE_EMAIL_NOTIFICATIONS and alert.user and alert.user.email:
             try:
-                send_alert_email_async(
+                email_sent = send_alert_notification(
                     user_email=alert.user.email,
                     symbol=alert.stock_symbol,
                     current_price=current_price,
@@ -898,23 +806,23 @@ def trigger_alert(
                 )
                 
                 # Update history entry with email sent timestamp
-                history_entry.email_sent = True
-                history_entry.email_sent_at = now
-                db.commit()
-                email_sent = True
-                
-                logger.info(
-                    f"Email notification queued for alert",
-                    extra={
-                        "alert_id": alert.id,
-                        "user_email": alert.user.email,
-                        "history_id": history_entry.id,
-                    },
-                )
+                if email_sent:
+                    history_entry.email_sent = True
+                    history_entry.email_sent_at = now
+                    db.commit()
+                    
+                    logger.info(
+                        f"Email notification sent for alert",
+                        extra={
+                            "alert_id": alert.id,
+                            "user_email": alert.user.email,
+                            "history_id": history_entry.id,
+                        },
+                    )
             except Exception as e:
                 # Don't fail alert trigger if email fails
                 logger.warning(
-                    f"Failed to queue email notification",
+                    f"Failed to send email notification",
                     extra={
                         "alert_id": alert.id,
                         "history_id": history_entry.id,
@@ -922,6 +830,91 @@ def trigger_alert(
                         "error_type": type(e).__name__,
                     },
                 )
+        
+        # Broadcast alert via WebSocket to all connected clients
+        try:
+            alert_data = {
+                "type": "alert",
+                "alert_id": alert.id,
+                "symbol": alert.stock_symbol,
+                "message": f"🔔 Alert triggered: {alert.stock_symbol} hit target {alert.condition.value if alert.condition else ''} ${alert.target_value:.2f} (Current: ${current_price:.2f})",
+                "current_price": current_price,
+                "target_value": alert.target_value,
+                "condition": alert.condition.value if alert.condition else "N/A",
+                "alert_type": alert.alert_type.value,
+                "timestamp": triggered_at_str,
+            }
+            
+            # Broadcast via WebSocket (async operation)
+            asyncio.create_task(alert_manager.broadcast_alert(alert_data))
+            
+            logger.info(
+                f"✅ Alert broadcasted via WebSocket",
+                extra={
+                    "alert_id": alert.id,
+                    "symbol": alert.stock_symbol,
+                    "subscribers": alert_manager.get_subscriber_count(),
+                },
+            )
+        except Exception as e:
+            # Don't fail alert trigger if WebSocket broadcast fails
+            logger.warning(
+                f"Failed to broadcast alert via WebSocket",
+                extra={
+                    "alert_id": alert.id,
+                    "error": str(e),
+                },
+            )
+        
+        # Send WhatsApp notification if enabled and user has phone configured
+        try:
+            # Check if user has WhatsApp notifications enabled and phone number set
+            if (
+                settings.ENABLE_WHATSAPP_NOTIFICATIONS
+                and alert.user
+                and hasattr(alert.user, "whatsapp_phone")
+                and alert.user.whatsapp_phone
+            ):
+                # Format beautifully structured WhatsApp message
+                time_now = datetime.utcnow().strftime("%d-%m-%Y %H:%M")
+                condition_str = alert.condition.value if alert.condition else "N/A"
+                
+                formatted_message = f"""🚨 *STOCK ALERT*
+
+📈 Symbol: *{alert.stock_symbol}*
+🎯 Target Hit: ₹{alert.target_value:.2f}
+📊 Condition: {alert.stock_symbol} {condition_str} ₹{alert.target_value:.2f}
+💹 Current Price: ₹{current_price:.2f}
+🕒 Time: {time_now}
+
+⚡ *Action:* Check your dashboard now!
+
+_- StockSentinel_"""
+                
+                whatsapp_sent = send_whatsapp_notification(
+                    phone_number=alert.user.whatsapp_phone,
+                    message=formatted_message,
+                )
+                
+                if whatsapp_sent:
+                    logger.info(
+                        f"✅ WhatsApp alert sent with formatted message",
+                        extra={
+                            "alert_id": alert.id,
+                            "phone": alert.user.whatsapp_phone,
+                            "symbol": alert.stock_symbol,
+                        },
+                    )
+        except Exception as e:
+            # Don't fail alert trigger if WhatsApp fails
+            logger.warning(
+                f"Failed to send WhatsApp alert",
+                extra={
+                    "alert_id": alert.id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
         
         logger.info(
             f"Alert trigger complete",

@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard } from '@/components/sentinel/primitives';
@@ -15,12 +15,12 @@ export default function WatchlistPage() {
   const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
   const [symbolInput, setSymbolInput] = useState('');
 
-  async function refreshWatchlist() {
+  const refreshWatchlist = useCallback(async () => {
     const watchlist = await watchlistService.list();
     setSymbols(watchlist.tickers);
     const quoteResults = await Promise.allSettled(watchlist.tickers.map((ticker) => marketService.getStockPrice(ticker)));
     setQuotes(quoteResults.filter((item): item is PromiseFulfilledResult<LiveQuote> => item.status === 'fulfilled').map((item) => item.value));
-  }
+  }, []);
 
   useEffect(() => {
     Promise.allSettled([refreshWatchlist(), marketService.getMarketSummary(), marketService.getLiveRibbon()]).then((results) => {
@@ -31,13 +31,13 @@ export default function WatchlistPage() {
     });
   }, []);
 
-  async function handleAdd(event: FormEvent<HTMLFormElement>) {
+  const handleAdd = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!symbolInput.trim()) return;
-    await watchlistService.add(symbolInput.trim().toUpperCase());
+    await watchlistService.add((symbolInput.trim() || "").toUpperCase());
     setSymbolInput('');
     await refreshWatchlist();
-  }
+  }, [symbolInput, refreshWatchlist]);
 
   return (
     <ProtectedScreen>

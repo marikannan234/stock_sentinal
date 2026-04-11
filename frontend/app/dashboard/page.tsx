@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelLineChart } from '@/components/sentinel/charts';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { Icon, StatChip, SurfaceCard, Skeleton } from '@/components/sentinel/primitives';
-import { marketService, newsService, portfolioService } from '@/lib/api-service';
+import { marketService, portfolioService } from '@/lib/api-service';
+import { api } from '@/lib/api-client';
 import type { LiveQuote, MarketSummary, NewsArticle, PortfolioGrowthPoint, PortfolioSummary } from '@/lib/types';
 import { formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
@@ -23,26 +24,42 @@ export default function DashboardPage() {
   const [activeRange, setActiveRange] = useState<DashRange>('1D');
   const [loading, setLoading] = useState(true);
 
+  // Fetch combined dashboard data on mount
   useEffect(() => {
-    Promise.allSettled([
-      portfolioService.summary(),
-      marketService.getLiveRibbon(),
-      marketService.getMarketSummary(),
-      newsService.global(3),
-    ]).then(([summaryResult, ribbonResult, marketResult, newsResult]) => {
-      if (summaryResult.status === 'fulfilled') setSummary(summaryResult.value);
-      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks);
-      if (marketResult.status === 'fulfilled') setMarket(marketResult.value);
-      if (newsResult.status === 'fulfilled') setNews(newsResult.value.articles.slice(0, 3));
-      setLoading(false);
-    });
+    const fetchDashboard = async () => {
+      try {
+        const response = await api.get('/dashboard/data');
+        const data = response.data;
+        setSummary(data.portfolio);
+        setMarket(data.market);
+        setRibbon(data.ribbon?.stocks || []);
+        setNews(data.news?.slice(0, 3) || []);
+        setLoading(false);
+      } catch (error) {
+        console.error('Failed to fetch dashboard data:', error);
+        setLoading(false);
+      }
+    };
+    fetchDashboard();
   }, []);
 
+  // Fetch growth data (separate endpoint, less frequent)
   useEffect(() => {
-    portfolioService.growth(rangeMap[activeRange]).then(setGrowth).catch(() => setGrowth([]));
+    portfolioService
+      .growth(rangeMap[activeRange])
+      .then(setGrowth)
+      .catch(() => setGrowth([]));
   }, [activeRange]);
 
-  const movers = market ? [...(market.top_gainers ?? []).slice(0, 2), ...(market.top_losers ?? []).slice(0, 1)] : [];
+  // Memoize range change handler to prevent unnecessary re-renders
+  const handleRangeChange = useCallback((range: DashRange) => {
+    setActiveRange(range);
+  }, []);
+
+  const movers = useMemo(() => {
+    if (!market) return [];
+    return [...(market.top_gainers ?? []).slice(0, 2), ...(market.top_losers ?? []).slice(0, 1)];
+  }, [market]);
 
   return (
     <ProtectedScreen>
@@ -91,7 +108,7 @@ export default function DashboardPage() {
                   {dashRanges.map((range) => (
                     <button
                       key={range}
-                      onClick={() => setActiveRange(range)}
+                      onClick={() => handleRangeChange(range)}
                       className={range === activeRange ? 'rounded-lg bg-[var(--surface-highest)] px-3 py-1 text-white' : 'px-3 py-1 text-[var(--on-surface-variant)] hover:text-white'}
                     >
                       {range}

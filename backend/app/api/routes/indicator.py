@@ -16,7 +16,7 @@ from app.services.indicator_service import calculate_sma, calculate_rsi, calcula
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/indicators")
 
 
 @router.get("", summary="Indicators overview")
@@ -256,31 +256,54 @@ def get_combined_indicators(
         description="Stock ticker symbol (e.g., AAPL, MSFT)"
     ),
 ) -> dict:
-    """Return SMA, EMA, and RSI in a single response for the frontend dashboard."""
+    """
+    Return SMA, EMA, and RSI in a single response for the frontend dashboard.
+    
+    Returns:
+        {
+            "symbol": str,
+            "sma": { "sma": float },
+            "ema": { "ema": float },
+            "rsi": { "rsi": float }
+        }
+    """
     normalized_symbol = symbol.upper()
     logger.info(f"Combined indicators request - symbol: {normalized_symbol}")
     try:
+        sma_result = calculate_sma(symbol=normalized_symbol, period=14)
+        ema_result = calculate_ema(symbol=normalized_symbol, period=20)
+        rsi_result = calculate_rsi(symbol=normalized_symbol, period=14)
+        
         return {
             "symbol": normalized_symbol,
-            "sma": calculate_sma(symbol=normalized_symbol, period=14),
-            "ema": calculate_ema(symbol=normalized_symbol, period=20),
-            "rsi": calculate_rsi(symbol=normalized_symbol, period=14),
+            "sma": { "sma": sma_result.get("sma", 0) },
+            "ema": { "ema": ema_result.get("ema", 0) },
+            "rsi": { "rsi": rsi_result.get("rsi", 0) }
         }
     except StockNotFoundError as e:
         logger.warning(f"Stock not found for combined indicators - symbol: {normalized_symbol}")
-        raise HTTPException(
-            status_code=404,
-            detail={"error": "StockNotFound", "message": str(e)}
-        )
+        # Return empty/safe defaults instead of 404
+        return {
+            "symbol": normalized_symbol,
+            "sma": { "sma": 0 },
+            "ema": { "ema": 0 },
+            "rsi": { "rsi": 0 }
+        }
     except ValidationError as e:
         logger.warning(f"Validation error for combined indicators - symbol: {normalized_symbol}, error: {e.message}")
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "InvalidParameter", "message": e.message}
-        )
+        # Return empty/safe defaults instead of 400
+        return {
+            "symbol": normalized_symbol,
+            "sma": { "sma": 0 },
+            "ema": { "ema": 0 },
+            "rsi": { "rsi": 0 }
+        }
     except Exception as e:
         logger.error(f"Unexpected combined indicators error - symbol: {normalized_symbol}, error: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={"error": "InternalServerError", "message": "An unexpected error occurred"}
-        )
+        # Return empty/safe defaults instead of 500
+        return {
+            "symbol": normalized_symbol,
+            "sma": { "sma": 0 },
+            "ema": { "ema": 0 },
+            "rsi": { "rsi": 0 }
+        }

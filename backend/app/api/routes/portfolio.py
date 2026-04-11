@@ -123,18 +123,23 @@ def _classify_asset(ticker: str) -> str:
 
 
 def _enrich_holding(holding: HoldingItem) -> HoldingItem:
+    """Enrich holding with current price data. Gracefully falls back on error."""
     quantity = float(holding.quantity or 0)
     average_price = float(holding.average_price or 0)
     invested_amount = quantity * average_price
 
     current_price = average_price
     previous_close = average_price
+    
     try:
         quote = fetch_stock_quote(holding.ticker)
         current_price = float(quote.price or average_price)
         previous_close = float(quote.previous_close or current_price)
-    except HTTPException:
-        pass
+    except Exception as e:
+        # Graceful fallback: use average price on any error
+        logger.warning(f"Error fetching quote for {holding.ticker}: {e}")
+        current_price = average_price
+        previous_close = average_price
 
     current_value = quantity * current_price
     pl_amount = current_value - invested_amount
@@ -245,7 +250,10 @@ def get_portfolio_growth(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> list[PortfolioGrowthPoint]:
-    """Return historical portfolio value points for the selected time range."""
+    """
+    Return historical portfolio value points for the selected time range.
+    Gracefully skips holdings that timeout or fail (no crash).
+    """
     logger.info("Portfolio growth requested", extra={"user_id": current_user.id, "range": range_key})
     holdings = _holdings_list(db, current_user.id)
     if not holdings:
@@ -256,20 +264,29 @@ def get_portfolio_growth(
 
     for holding in holdings:
         try:
+            # Fetch historical data - no signal.alarm() on Windows
+            # yfinance is generally fast, errors will be caught below
             history = yf.Ticker(holding.ticker).history(period=period, interval=interval, auto_adjust=False)
-        except Exception:
-            history = None
+                
+        except Exception as e:
+            # Skip this holding on error, don't crash
+            logger.warning(f"Error fetching growth history for {holding.ticker}: {e}")
+            continue
 
         if history is None or history.empty:
             continue
 
         quantity = float(holding.quantity or 0)
-        for idx, row in history.iterrows():
-            if getattr(idx, "tzinfo", None) is not None:
-                idx = idx.tz_convert(None)
-            date_label = idx.strftime("%Y-%m-%d %H:%M") if range_key == "1d" else idx.strftime("%Y-%m-%d")
-            close_price = float(row.get("Close") or 0)
-            portfolio_points[date_label] = portfolio_points.get(date_label, 0.0) + (close_price * quantity)
+        try:
+            for idx, row in history.iterrows():
+                if getattr(idx, "tzinfo", None) is not None:
+                    idx = idx.tz_convert(None)
+                date_label = idx.strftime("%Y-%m-%d %H:%M") if range_key == "1d" else idx.strftime("%Y-%m-%d")
+                close_price = float(row.get("Close") or 0)
+                portfolio_points[date_label] = portfolio_points.get(date_label, 0.0) + (close_price * quantity)
+        except Exception as e:
+            logger.warning(f"Error parsing growth data for {holding.ticker}: {e}")
+            continue
 
     sorted_points = sorted(
         (PortfolioGrowthPoint(date=date_key, value=round(value, 2)) for date_key, value in portfolio_points.items()),
@@ -383,3 +400,96 @@ def _remove_position(
     db.delete(position)
     db.commit()
     return _holdings_list(db, current_user.id)
+
+
+# ============================================
+# Optimized Combined Dashboard Endpoint
+# ============================================
+class PortfolioDashboardResponse(BaseModel):
+    """Combined portfolio dashboard with all key metrics."""
+    holdings: list[HoldingItem]
+    summary: PortfolioSummaryResponse
+    allocation: PortfolioAllocationResponse
+
+
+@router.get("/dashboard/combined", response_model=PortfolioDashboardResponse, summary="Get combined portfolio dashboard")
+def get_portfolio_dashboard(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> PortfolioDashboardResponse:
+    """
+    Get complete portfolio dashboard in a single optimized call.
+    Combines holdings, summary, and allocation to reduce redundant queries.
+    
+    This endpoint is more efficient than calling /portfolio, /portfolio/summary,
+    and /portfolio/allocation separately.
+    """
+    logger.info("Portfolio dashboard requested", extra={"user_id": current_user.id})
+    
+    try:
+        # Fetch enriched holdings once
+        holdings = _enriched_holdings(db, current_user.id)
+        
+        # Calculate summary from holdings
+        total_invested = sum(float(holding.invested_amount or 0) for holding in holdings)
+        current_value = sum(float(holding.current_value or 0) for holding in holdings)
+        day_pl = sum(float(holding.day_change or 0) for holding in holdings)
+        total_pl = current_value - total_invested
+        percent_pl = (total_pl / total_invested * 100) if total_invested > 0 else 0.0
+        day_percent = (day_pl / (current_value - day_pl) * 100) if (current_value - day_pl) > 0 else 0.0
+        
+        summary = PortfolioSummaryResponse(
+            total_invested=round(total_invested, 2),
+            current_value=round(current_value, 2),
+            total_pl=round(total_pl, 2),
+            percent_pl=round(percent_pl, 2),
+            day_pl=round(day_pl, 2),
+            day_percent=round(day_percent, 2),
+            buying_power=0.0,
+        )
+        
+        # Calculate allocation from holdings
+        grouped: dict[str, float] = {}
+        for holding in holdings:
+            category = holding.asset_class or _classify_asset(holding.ticker)
+            grouped[category] = grouped.get(category, 0.0) + float(holding.current_value or 0)
+        
+        allocations = [
+            AllocationItem(
+                category=category,
+                value=round(value, 2),
+                percent=round((value / current_value * 100) if current_value > 0 else 0.0, 2),
+            )
+            for category, value in sorted(grouped.items(), key=lambda item: item[1], reverse=True)
+        ]
+        
+        allocation = PortfolioAllocationResponse(
+            total_value=round(current_value, 2),
+            allocations=allocations,
+        )
+        
+        return PortfolioDashboardResponse(
+            holdings=holdings,
+            summary=summary,
+            allocation=allocation,
+        )
+    
+    except Exception as e:
+        logger.error(f"Error in portfolio dashboard: {e}")
+        # Return minimal response on error instead of crashing
+        return PortfolioDashboardResponse(
+            holdings=[],
+            summary=PortfolioSummaryResponse(
+                total_invested=0.0,
+                current_value=0.0,
+                total_pl=0.0,
+                percent_pl=0.0,
+                day_pl=0.0,
+                day_percent=0.0,
+                buying_power=0.0,
+            ),
+            allocation=PortfolioAllocationResponse(
+                total_value=0.0,
+                allocations=[],
+            ),
+        )

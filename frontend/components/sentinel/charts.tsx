@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import { PortfolioAllocation, PortfolioGrowthPoint } from '@/lib/types';
 import { cn, formatCurrency } from '@/lib/sentinel-utils';
 
@@ -43,9 +44,60 @@ export function SentinelLineChart({
   const labels = points.filter((_, index) => index === 0 || index === points.length - 1 || index % Math.max(1, Math.floor(points.length / 4)) === 0);
   const peak = [...points].sort((a, b) => b.value - a.value)[0];
 
+  // Tooltip hover tracking (no flicker)
+  const hoveredIndexRef = useRef<number | null>(null);
+  const [, forceUpdate] = useState(0);
+
+  const hoveredIndex = hoveredIndexRef.current;
+  const hoveredData = hoveredIndex !== null && points[hoveredIndex] ? points[hoveredIndex] : null;
+  const prevData = hoveredIndex !== null && hoveredIndex > 0 ? points[hoveredIndex - 1] : null;
+  const profitChange = hoveredData && prevData ? hoveredData.value - prevData.value : null;
+  const profitChangePercent = hoveredData && prevData ? (profitChange! / prevData.value) * 100 : null;
+
+  function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * width;
+    const newIndex = Math.round((x / width) * (points.length - 1));
+    const clamped = Math.max(0, Math.min(points.length - 1, newIndex));
+
+    if (clamped !== hoveredIndexRef.current) {
+      hoveredIndexRef.current = clamped;
+      forceUpdate((p) => p + 1);
+    }
+  }
+
+  function handleMouseLeave() {
+    if (hoveredIndexRef.current !== null) {
+      hoveredIndexRef.current = null;
+      forceUpdate((p) => p + 1);
+    }
+  }
+
   return (
     <div className={cn('relative w-full', compact ? 'h-[300px]' : 'h-[360px]')}>
-      <svg className="h-full w-full" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`}>
+      {/* Tooltip */}
+      {hoveredData && (
+        <div className="absolute left-4 top-2 z-10 rounded-xl bg-[rgba(53,52,55,0.85)] px-4 py-3 border border-white/10 backdrop-blur-xl">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">
+            {new Date(hoveredData.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </p>
+          <p className="mt-1 font-mono text-lg font-bold text-white">{formatCurrency(hoveredData.value)}</p>
+          {profitChange !== null && profitChangePercent !== null && (
+            <p className={`font-mono text-sm ${profitChange >= 0 ? 'text-[#4edea3]' : 'text-[#ffb3ad]'}`}>
+              {profitChange >= 0 ? '+' : ''}{formatCurrency(profitChange)} ({profitChangePercent >= 0 ? '+' : ''}{profitChangePercent.toFixed(2)}%)
+            </p>
+          )}
+        </div>
+      )}
+
+      <svg
+        className="h-full w-full cursor-crosshair"
+        preserveAspectRatio="none"
+        viewBox={`0 0 ${width} ${height}`}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
         <defs>
           <linearGradient id={`gradient-${accent.replace('#', '')}`} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor={accent} stopOpacity="0.18" />
@@ -57,13 +109,31 @@ export function SentinelLineChart({
         <line x1="0" y1={height * 0.8} x2={width} y2={height * 0.8} stroke="rgba(255,255,255,0.05)" strokeDasharray="6 10" />
         {area ? <path d={area} fill={`url(#gradient-${accent.replace('#', '')})`} /> : null}
         {line ? <path d={line} fill="none" stroke={accent} strokeLinecap="round" strokeWidth="3.5" /> : null}
+        {/* Hover indicator */}
+        {hoveredIndex !== null && points[hoveredIndex] && (
+          <circle
+            cx={(hoveredIndex / Math.max(points.length - 1, 1)) * width}
+            cy={(() => {
+              const values = points.map((p) => p.value);
+              const min = Math.min(...values);
+              const max = Math.max(...values);
+              const span = max - min || 1;
+              return height - ((points[hoveredIndex].value - min) / span) * (height - 20) - 10;
+            })()}
+            r="4"
+            fill={accent}
+            opacity="0.7"
+          />
+        )}
       </svg>
+
       {peak ? (
         <div className="absolute right-[18%] top-12 rounded-2xl border border-white/10 bg-[rgba(53,52,55,0.48)] px-4 py-3 shadow-2xl backdrop-blur-xl">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">Peak</p>
           <p className="font-mono text-[18px] font-medium text-white">{formatCurrency(peak.value)}</p>
         </div>
       ) : null}
+
       <div className="mt-6 flex justify-between px-2">
         {labels.slice(0, 5).map((label) => (
           <span key={label.date} className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">

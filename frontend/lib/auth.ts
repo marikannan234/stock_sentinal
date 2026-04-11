@@ -10,8 +10,8 @@ type AuthState = {
   loading: boolean;
   error: string | null;
   isHydrated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName?: string) => Promise<void>;
+  login: (emailOrPhone: string, password: string) => Promise<void>;
+  register: (email: string, password: string, fullName?: string, whatsappPhone?: string) => Promise<void>;
   refreshUser: () => Promise<void>;
   logout: () => void;
   clearError: () => void;
@@ -56,10 +56,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  async login(email, password) {
+  async login(emailOrPhone, password) {
     try {
       set({ loading: true, error: null });
-      const { access_token } = await authService.login(email, password);
+      const { access_token } = await authService.login(emailOrPhone, password);
 
       if (typeof window !== "undefined") {
         window.localStorage.setItem(TOKEN_KEY, access_token);
@@ -77,10 +77,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  async register(email, password, fullName) {
+  async register(email, password, fullName, whatsappPhone) {
     try {
       set({ loading: true, error: null });
-      await authService.register(email, password, fullName);
+      await authService.register(email, password, fullName, whatsappPhone);
       await get().login(email, password);
       set({ loading: false, error: null });
     } catch (error) {

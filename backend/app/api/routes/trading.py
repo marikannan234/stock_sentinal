@@ -48,7 +48,8 @@ def _update_portfolio_from_trade(
 ) -> None:
     """Update user's portfolio based on trade."""
 
-    normalized_trade_type = trade_type.value if hasattr(trade_type, "value") else trade_type
+    # Coerce to string in case it's a Pydantic enum or TradeType enum
+    normalized_trade_type = str(trade_type)
     ticker = symbol.upper()
     portfolio = db.query(Portfolio).filter(
         Portfolio.user_id == user_id,
@@ -124,7 +125,7 @@ def create_trade(
             quantity=trade_create.quantity,
             entry_price=trade_create.entry_price,
             current_price=trade_create.entry_price,
-            trade_type=TradeType(trade_create.trade_type.value),
+            trade_type=TradeType(trade_create.trade_type),
             status=TradeStatus.OPEN,
             created_at=datetime.utcnow(),
         )
@@ -299,23 +300,88 @@ def get_trade_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
     symbol_filter: Optional[str] = Query(None),
-) -> List[TradeHistory]:
-    """Get trade history for current user."""
+) -> List[dict]:
+    """Get trade history for current user with computed status."""
     
     query = db.query(TradeHistory).filter(TradeHistory.user_id == current_user.id)
     
     if symbol_filter:
         query = query.filter(TradeHistory.symbol == symbol_filter.upper())
     
-    history = query.order_by(desc(TradeHistory.closed_at)).all()
-    return history
+    history = query.order_by(desc(TradeHistory.created_at)).all()
+    
+    # Compute status for each trade
+    result = []
+    for trade in history:
+        trade_dict = {
+            "id": trade.id,
+            "user_id": trade.user_id,
+            "trade_id": trade.trade_id,
+            "symbol": trade.symbol,
+            "quantity": trade.quantity,
+            "entry_price": trade.entry_price,
+            "exit_price": trade.exit_price,
+            "trade_type": trade.trade_type.value if hasattr(trade.trade_type, "value") else str(trade.trade_type),
+            "profit_loss": trade.profit_loss,
+            "profit_loss_percent": trade.profit_loss_percent,
+            "duration_minutes": trade.duration_minutes,
+            "notes": trade.notes,
+            "created_at": trade.created_at,
+            "closed_at": trade.closed_at,
+            "status": "closed" if trade.exit_price is not None else "open"
+        }
+        result.append(trade_dict)
+    
+    return result
+
+
+@router.get("/history/summary", response_model=TradeHistorySummary)
+def get_trade_history_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> TradeHistorySummary:
+    """Get trade history summary (total trades, win rate, net profit, avg execution)."""
+    
+    trades = db.query(TradeHistory).filter(
+        TradeHistory.user_id == current_user.id,
+        TradeHistory.exit_price.isnot(None)  # Only closed trades
+    ).all()
+    
+    if not trades:
+        return TradeHistorySummary(
+            total_trades=0,
+            win_rate=0.0,
+            net_profit=0.0,
+            avg_execution=None,
+        )
+    
+    total_trades = len(trades)
+    
+    # Calculate net profit
+    profit_values = [t.profit_loss for t in trades if t.profit_loss is not None]
+    net_profit = sum(profit_values) if profit_values else 0.0
+    
+    # Calculate win rate
+    winning_trades = sum(1 for profit in profit_values if profit and profit > 0)
+    win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0.0
+    
+    # Calculate average execution time
+    durations = [t.duration_minutes for t in trades if t.duration_minutes is not None]
+    avg_execution = sum(durations) / len(durations) if durations else None
+    
+    return TradeHistorySummary(
+        total_trades=total_trades,
+        win_rate=round(win_rate, 2),
+        net_profit=round(net_profit, 2),
+        avg_execution=round(avg_execution, 2) if avg_execution else None,
+    )
 
 
 @router.get("/summary/stats", response_model=TradeHistorySummary)
 def get_trade_summary(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
-) -> dict:
+) -> TradeHistorySummary:
     """Get trade statistics summary."""
     
     trades = db.query(TradeHistory).filter(
@@ -325,30 +391,23 @@ def get_trade_summary(
     if not trades:
         return TradeHistorySummary(
             total_trades=0,
-            total_profit_loss=0.0,
             win_rate=0.0,
-            avg_profit_loss=0.0,
-            total_invested=0.0,
-            best_trade=None,
-            worst_trade=None,
+            net_profit=0.0,
+            avg_execution=None,
         )
     
     total_trades = len(trades)
     profit_values = [t.profit_loss for t in trades if t.profit_loss is not None]
-    winning_trades = sum(1 for profit in profit_values if profit > 0)
-    win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
-    total_profit_loss = sum(profit_values)
-    avg_profit_loss = total_profit_loss / total_trades if total_trades > 0 else 0
-    total_invested = sum(t.entry_price * t.quantity for t in trades)
-    best_trade = max(profit_values) if profit_values else None
-    worst_trade = min(profit_values) if profit_values else None
+    winning_trades = sum(1 for profit in profit_values if profit and profit > 0)
+    win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0.0
+    net_profit = sum(profit_values) if profit_values else 0.0
+    
+    durations = [t.duration_minutes for t in trades if t.duration_minutes is not None]
+    avg_execution = sum(durations) / len(durations) if durations else None
     
     return TradeHistorySummary(
         total_trades=total_trades,
-        total_profit_loss=round(total_profit_loss, 2),
         win_rate=round(win_rate, 2),
-        avg_profit_loss=round(avg_profit_loss, 2),
-        total_invested=round(total_invested, 2),
-        best_trade=round(best_trade, 2) if best_trade is not None else None,
-        worst_trade=round(worst_trade, 2) if worst_trade is not None else None,
+        net_profit=round(net_profit, 2),
+        avg_execution=round(avg_execution, 2) if avg_execution else None,
     )

@@ -23,36 +23,53 @@ def _finnhub_symbol_search(query: str) -> List[Dict[str, Any]]:
 
   api_key = settings.FINNHUB_API_KEY
   if not api_key:
-    raise HTTPException(status_code=500, detail="FINNHUB_API_KEY is not configured on the server.")
+    import logging
+    logging.getLogger(__name__).warning("FINNHUB_API_KEY not configured")
+    return []  # Return empty list instead of raising
 
   url = "https://finnhub.io/api/v1/search"
   params = {"q": q, "token": api_key}
 
   try:
-    resp = requests.get(url, params=params, timeout=8)
-  except requests.RequestException:
-    raise HTTPException(status_code=502, detail="Failed to reach Finnhub API.")
+    resp = requests.get(url, params=params, timeout=5)  # Reduced timeout to 5 seconds
+  except requests.Timeout:
+    import logging
+    logging.getLogger(__name__).warning(f"Finnhub search timeout for query: {q}")
+    return []  # Return empty list on timeout
+  except requests.ConnectionError as e:
+    import logging
+    logging.getLogger(__name__).warning(f"Finnhub search connection error: {e}")
+    return []  # Return empty list on connection error
+  except requests.RequestException as e:
+    import logging
+    logging.getLogger(__name__).warning(f"Finnhub search request error: {e}")
+    return []  # Return empty list instead of raising
 
   if resp.status_code == 429:
-    raise HTTPException(
-      status_code=429,
-      detail="Finnhub rate limit reached. Please wait a few minutes and try again.",
-    )
+    import logging
+    logging.getLogger(__name__).warning("Finnhub rate limit reached")
+    return []  # Return empty list instead of raising
   if resp.status_code == 403:
-    raise HTTPException(
-      status_code=502,
-      detail="Finnhub access forbidden (403). Check FINNHUB_API_KEY and plan access.",
-    )
+    import logging
+    logging.getLogger(__name__).warning("Finnhub access forbidden (403)")
+    return []  # Return empty list instead of raising
   if resp.status_code != 200:
-    raise HTTPException(status_code=502, detail=f"Finnhub API error (status {resp.status_code}).")
+    import logging
+    logging.getLogger(__name__).warning(f"Finnhub API error {resp.status_code}")
+    return []  # Return empty list instead of raising
 
-  data = resp.json()
-  if not isinstance(data, dict):
-    raise HTTPException(status_code=502, detail="Unexpected Finnhub response for symbol search.")
-  results = data.get("result") or []
-  if not isinstance(results, list):
-    raise HTTPException(status_code=502, detail="Unexpected Finnhub response for symbol search.")
-  return results
+  try:
+    data = resp.json()
+    if not isinstance(data, dict):
+      return []
+    results = data.get("result") or []
+    if not isinstance(results, list):
+      return []
+    return results
+  except Exception as e:
+    import logging
+    logging.getLogger(__name__).warning(f"Error parsing Finnhub response: {e}")
+    return []  # Return empty list on parse error
 
 
 @router.get("", response_model=list[SymbolSearchItem], summary="Search symbols by query")

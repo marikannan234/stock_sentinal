@@ -7,7 +7,8 @@ import { Tooltip } from 'react-tooltip';
 import type { AlertItem, LiveQuote, SymbolSearchItem } from '@/lib/types';
 import { cn, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 import { Icon } from './primitives';
-import { alertService, marketService, tradeService } from '@/lib/api-service';
+import { alertService, marketService, portfolioService, getErrorMessage } from '@/lib/api-service';
+import { api } from '@/lib/api-client';
 
 type NavItem = {
   href: string;
@@ -39,28 +40,73 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!symbol || !quantity || !price) return;
+    if (!symbol || !quantity || !price) {
+      setError('All fields required');
+      return;
+    }
+
+    const qty = Number(quantity);
+    const priceNum = Number(price);
+
+    if (qty <= 0 || priceNum <= 0) {
+      setError('Quantity and price must be positive');
+      return;
+    }
+
     setLoading(true);
     setError('');
+
     try {
-      await tradeService.create({
-        symbol: symbol.toUpperCase(),
-        quantity: Number(quantity),
-        entry_price: Number(price),
-        trade_type: side,
-      });
-      setToast(`${side.toUpperCase()} order placed for ${symbol.toUpperCase()}`);
+      if (side === 'buy') {
+        // BUY: Add to portfolio using API service (includes Authorization token)
+        await portfolioService.add((symbol || "").toUpperCase(), qty, priceNum);
+        setToast(`✓ Bought ${qty} ${(symbol || "").toUpperCase()} @ $${priceNum.toFixed(2)}`);
+      } else {
+        // SELL: Validate portfolio before removing
+        // 1. Get current portfolio holdings
+        const portfolioHoldings = await portfolioService.list();
+        
+        // 2. Check if ticker exists in portfolio
+        const holding = portfolioHoldings.find((h) => (h.ticker || "").toUpperCase() === (symbol || "").toUpperCase());
+        if (!holding) {
+          throw new Error(`${(symbol || "").toUpperCase()} not found in portfolio`);
+        }
+        
+        // 3. Check if we have enough shares to sell
+        if (holding.quantity < qty) {
+          throw new Error(`Not enough shares of ${(symbol || "").toUpperCase()}. You have ${holding.quantity.toFixed(2)}, trying to sell ${qty}`);
+        }
+        
+        // 4. Send DELETE request with quantity via API service
+        await api.delete(`/portfolio/${(symbol || "").toUpperCase()}`, {
+          data: { quantity: qty },
+        });
+        
+        setToast(`✓ Sold ${qty} ${(symbol || "").toUpperCase()} @ $${priceNum.toFixed(2)}`);
+      }
+
       setTimeout(() => {
+        // Dispatch custom event to refresh portfolio and trade history
+        window.dispatchEvent(new CustomEvent('tradeCompleted', {
+          detail: { symbol, qty, priceNum, side }
+        }));
+        
         setToast('');
+        setSymbol('');
+        setQuantity('');
+        setPrice('');
         onClose();
-      }, 1800);
+      }, 2000);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof msg === 'string' ? msg : 'Order failed. Please try again.');
+      // Use getErrorMessage for better error parsing
+      const errorMsg = getErrorMessage(err, `${side === 'buy' ? 'Buy' : 'Sell'} failed. Please try again.`);
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
   }
+
+  const isFormValid = symbol && quantity && price && Number(quantity) > 0 && Number(price) > 0;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -74,8 +120,28 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setSide('buy')} className={cn('rounded-xl py-2.5 text-sm font-black uppercase tracking-[0.12em] transition-all', side === 'buy' ? 'bg-secondary/15 text-secondary border border-secondary/30' : 'bg-[var(--surface-lowest)] text-[var(--on-surface-variant)]')}>Buy</button>
-              <button type="button" onClick={() => setSide('sell')} className={cn('rounded-xl py-2.5 text-sm font-black uppercase tracking-[0.12em] transition-all', side === 'sell' ? 'bg-tertiary/15 text-tertiary border border-tertiary/30' : 'bg-[var(--surface-lowest)] text-[var(--on-surface-variant)]')}>Sell</button>
+              <button
+                type="button"
+                onClick={() => setSide('buy')}
+                className={`rounded-xl py-2.5 text-sm font-black uppercase tracking-[0.12em] transition-all ${
+                  side === 'buy'
+                    ? 'bg-secondary/15 text-secondary border border-secondary/30'
+                    : 'bg-[var(--surface-lowest)] text-[var(--on-surface-variant)]'
+                }`}
+              >
+                Buy
+              </button>
+              <button
+                type="button"
+                onClick={() => setSide('sell')}
+                className={`rounded-xl py-2.5 text-sm font-black uppercase tracking-[0.12em] transition-all ${
+                  side === 'sell'
+                    ? 'bg-tertiary/15 text-tertiary border border-tertiary/30'
+                    : 'bg-[var(--surface-lowest)] text-[var(--on-surface-variant)]'
+                }`}
+              >
+                Sell
+              </button>
             </div>
             <input
               value={symbol}
@@ -101,16 +167,16 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
               min="0.01"
               step="0.01"
               className="w-full rounded-xl bg-[var(--surface-lowest)] px-4 py-3 font-mono text-sm text-white outline-none placeholder:text-[var(--on-surface-variant)] focus:ring-2 focus:ring-[var(--primary)]/40"
-              placeholder="Entry Price (USD)"
+              placeholder="Price (USD)"
               required
             />
-            {error && <p className="text-xs text-tertiary">{error}</p>}
+            {error && <p className="text-xs text-tertiary font-semibold">{error}</p>}
             <button
               type="submit"
-              disabled={loading}
-              className="w-full rounded-2xl bg-[linear-gradient(135deg,#adc6ff_0%,#4d8eff_100%)] px-4 py-3 text-sm font-black text-[var(--on-primary)] disabled:opacity-60"
+              disabled={loading || !isFormValid}
+              className="w-full rounded-2xl bg-[linear-gradient(135deg,#adc6ff_0%,#4d8eff_100%)] px-4 py-3 text-sm font-black text-[var(--on-primary)] disabled:opacity-60 transition-opacity"
             >
-              {loading ? 'Placing…' : 'Place Order'}
+              {loading ? 'Processing…' : side === 'buy' ? 'Place Buy Order' : 'Place Sell Order'}
             </button>
           </form>
         )}
@@ -230,12 +296,15 @@ function SearchBar() {
         {loading && <Icon name="progress_activity" className="animate-spin text-xs text-[var(--on-surface-variant)]" />}
       </div>
       {open && results.length > 0 && (
-        <div className="absolute left-0 top-full mt-2 w-full rounded-2xl border border-white/10 bg-[#1c1c1e] shadow-2xl z-[300]">
+        <div className="absolute left-0 top-full mt-2 w-full rounded-2xl border border-white/10 bg-[#1c1c1e] shadow-2xl z-50 pointer-events-auto">
           {results.map((item) => (
             <button
               key={item.ticker}
-              onClick={() => handleSelect(item.ticker)}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface-high)] first:rounded-t-2xl last:rounded-b-2xl"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleSelect(item.ticker);
+              }}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface-high)] first:rounded-t-2xl last:rounded-b-2xl transition-colors cursor-pointer"
             >
               <span className="font-mono text-sm font-bold text-white">{item.ticker}</span>
               {item.name && <span className="truncate text-xs text-[var(--on-surface-variant)]">{item.name}</span>}

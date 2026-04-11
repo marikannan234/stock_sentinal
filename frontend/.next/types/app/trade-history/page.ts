@@ -1,4 +1,4 @@
-// File: D:\stock sentinal\frontend\app\trade-history\page.tsx
+// File: C:\Users\acer\Downloads\stock sentinal\frontend\app\trade-history\page.tsx
 import * as entry from '../../../../app/trade-history/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

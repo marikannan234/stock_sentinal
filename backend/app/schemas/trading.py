@@ -157,19 +157,22 @@ class TradeHistoryRead(BaseModel):
     notes: Optional[str]
     created_at: datetime
     closed_at: Optional[datetime]
+    status: str = "open"  # Computed: "open" if exit_price is None else "closed"
 
     class Config:
         from_attributes = True
+    
+    @property
+    def computed_status(self) -> str:
+        """Compute status based on exit_price."""
+        return "closed" if self.exit_price is not None else "open"
 
 
 class TradeHistorySummary(BaseModel):
     total_trades: int
-    total_profit_loss: float
     win_rate: float
-    avg_profit_loss: float
-    total_invested: float
-    best_trade: Optional[float]
-    worst_trade: Optional[float]
+    net_profit: float
+    avg_execution: Optional[float] = None
 
 
 # ============================================

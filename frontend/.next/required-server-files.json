@@ -99,7 +99,7 @@
         "transform": "lodash/{{member}}"
       }
     },
-    "outputFileTracingRoot": "D:\\stock sentinal\\frontend",
+    "outputFileTracingRoot": "C:\\Users\\acer\\Downloads\\stock sentinal\\frontend",
     "experimental": {
       "useSkewCookie": false,
       "cacheLife": {
@@ -289,15 +289,20 @@
     "bundlePagesRouterDependencies": false,
     "configFileName": "next.config.mjs",
     "turbopack": {
-      "root": "D:\\stock sentinal\\frontend"
+      "root": "C:\\Users\\acer\\Downloads\\stock sentinal\\frontend"
     },
     "_originalRewrites": {
       "beforeFiles": [],
-      "afterFiles": [],
+      "afterFiles": [
+        {
+          "source": "/backend-api/:path*",
+          "destination": "http://localhost:8000/api/:path*"
+        }
+      ],
       "fallback": []
     }
   },
-  "appDir": "D:\\stock sentinal\\frontend",
+  "appDir": "C:\\Users\\acer\\Downloads\\stock sentinal\\frontend",
   "relativeAppDir": "",
   "files": [
     ".next\\routes-manifest.json",

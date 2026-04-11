@@ -1,9 +1,10 @@
 """
-WebSocket routes for real-time stock price streaming.
+WebSocket routes for real-time stock price streaming and alert notifications.
 """
 
+import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from app.ws.connection_manager import manager
+from app.ws.connection_manager import manager, alert_manager
 from app.ws.price_streamer import streamer
 import logging
 
@@ -58,8 +59,20 @@ async def websocket_stock_price(websocket: WebSocket, symbol: str):
         # Keep connection alive and handle messages
         while True:
             try:
-                # Receive any messages from client (e.g., heartbeat)
+                # Receive any messages from client (e.g., heartbeat/ping)
                 data = await websocket.receive_text()
+                
+                # Handle ping messages from client (heartbeat)
+                try:
+                    message = json.loads(data)
+                    if message.get('type') == 'ping':
+                        # Send pong response to keep connection alive
+                        await websocket.send_text(json.dumps({'type': 'pong'}))
+                        logger.debug(f"Heartbeat received and pong sent for {symbol}")
+                        continue
+                except:
+                    pass
+                
                 logger.debug(f"Received message from {symbol}: {data}")
             except WebSocketDisconnect:
                 break
@@ -76,6 +89,64 @@ async def websocket_stock_price(websocket: WebSocket, symbol: str):
             stream_task_name = f"stream_{symbol}"
             await streamer.stop_streaming(stream_task_name)
             logger.info(f"Stopped streaming {symbol} - no active connections")
+
+
+@router.websocket("/alerts")
+async def websocket_alerts(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time alert notifications.
+    
+    Path: /ws/alerts
+    
+    Receives Alert Messages:
+        {
+            "type": "alert",
+            "alert_id": 123,
+            "symbol": "AAPL",
+            "message": "Alert triggered: AAPL hit target price $175.00",
+            "current_price": 175.25,
+            "target_value": 175.00,
+            "condition": ">",
+            "timestamp": "2026-01-16T10:30:45Z"
+        }
+    
+    Example JavaScript:
+        const ws = new WebSocket('ws://localhost:8000/ws/alerts');
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'alert') {
+                toast.success(data.message);
+            }
+        };
+    """
+    try:
+        await websocket.accept()
+        await alert_manager.subscribe(websocket)
+        logger.info(f"Alert client connected. Subscribers: {alert_manager.get_subscriber_count()}")
+        
+        # Keep connection alive and listen for heartbeat messages
+        while True:
+            try:
+                # Client can send ping messages to keep connection alive
+                data = await websocket.receive_text()
+                try:
+                    message = json.loads(data)
+                    if message.get('type') == 'ping':
+                        # Send pong response
+                        await websocket.send_text(json.dumps({'type': 'pong'}))
+                        logger.debug("Heartbeat pong sent")
+                except:
+                    pass
+            except WebSocketDisconnect:
+                break
+    
+    except Exception as e:
+        logger.error(f"WebSocket error in alerts: {e}")
+    
+    finally:
+        # Clean up on disconnect
+        await alert_manager.unsubscribe(websocket)
+        logger.info(f"Alert client disconnected. Subscribers: {alert_manager.get_subscriber_count()}")
 
 
 @router.get("/status")

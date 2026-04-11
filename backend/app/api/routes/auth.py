@@ -32,17 +32,28 @@ def register_user(
     user_in: UserCreate,
     db: Session = Depends(get_db_session),
 ) -> User:
-    existing = db.query(User).filter(User.email == user_in.email).first()
-    if existing:
+    # Check if email already exists
+    existing_email = db.query(User).filter(User.email == user_in.email).first()
+    if existing_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User with this email already exists",
         )
+    
+    # Check if WhatsApp phone already exists (if provided)
+    if user_in.whatsapp_phone:
+        existing_phone = db.query(User).filter(User.whatsapp_phone == user_in.whatsapp_phone).first()
+        if existing_phone:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User with this WhatsApp phone number already exists",
+            )
 
     user = User(
         email=user_in.email,
         full_name=user_in.full_name,
         password_hash=get_password_hash(user_in.password),
+        whatsapp_phone=user_in.whatsapp_phone,
     )
     db.add(user)
     try:
@@ -51,7 +62,7 @@ def register_user(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this email already exists",
+            detail="User with this email or phone number already exists",
         )
     db.refresh(user)
     return user
@@ -62,7 +73,12 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db_session),
 ) -> Token:
-    user = db.query(User).filter(User.email == form_data.username).first()
+    # Try to find user by email or phone number
+    user = db.query(User).filter(
+        (User.email == form_data.username) |
+        (User.whatsapp_phone == form_data.username)
+    ).first()
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -86,7 +102,19 @@ def login_json(
     login_data: UserLogin,
     db: Session = Depends(get_db_session),
 ) -> Token:
-    user = db.query(User).filter(User.email == login_data.email).first()
+    # Try to find user by email or phone number
+    query = db.query(User)
+    if login_data.email:
+        query = query.filter(User.email == login_data.email)
+    elif login_data.phone:
+        query = query.filter(User.whatsapp_phone == login_data.phone)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either email or phone must be provided",
+        )
+    
+    user = query.first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

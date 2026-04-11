@@ -11,16 +11,24 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(min_length=8, max_length=128)
+    whatsapp_phone: Optional[str] = Field(default=None, max_length=20, description="WhatsApp phone with country code (e.g., +919876543210)")
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
     password: str
+    
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.email and not self.phone:
+            raise ValueError('Either email or phone must be provided')
 
 
 class UserRead(UserBase):
     id: int
     is_active: bool
+    whatsapp_phone: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

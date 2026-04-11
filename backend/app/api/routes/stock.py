@@ -105,14 +105,22 @@ class StockDataResponse(BaseModel):
 
 # ----- Helpers -----
 def _finnhub_get(url: str, params: Dict[str, Any], ticker: str) -> Dict[str, Any]:
-    """Call Finnhub API; raise HTTPException on error."""
+    """Call Finnhub API with timeout; return None on error instead of crashing."""
     try:
-        resp = requests.get(url, params=params, timeout=10)
-    except requests.RequestException:
-        raise HTTPException(
-            status_code=502,
-            detail="Failed to reach Finnhub API.",
-        )
+        resp = requests.get(url, params=params, timeout=5)  # Reduced from 10 to 5 seconds
+    except requests.Timeout:
+        import logging
+        logging.getLogger(__name__).warning(f"Finnhub API timeout for {ticker}")
+        return {}  # Return empty dict on timeout
+    except requests.ConnectionError as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Finnhub API connection error for {ticker}: {e}")
+        return {}  # Return empty dict on connection error
+    except requests.RequestException as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Finnhub API request error for {ticker}: {e}")
+        return {}  # Return empty dict on other errors
+    
     if resp.status_code == 429:
         raise HTTPException(
             status_code=429,
@@ -129,11 +137,16 @@ def _finnhub_get(url: str, params: Dict[str, Any], ticker: str) -> Dict[str, Any
             ),
         )
     if resp.status_code != 200:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Finnhub API error (status {resp.status_code}).",
-        )
-    return resp.json()
+        import logging
+        logging.getLogger(__name__).warning(f"Finnhub API error {resp.status_code} for {ticker}")
+        return {}  # Return empty dict instead of raising
+    
+    try:
+        return resp.json()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Finnhub JSON parse error for {ticker}: {e}")
+        return {}
 
 
 # ----- Reusable quote fetcher (for portfolio summary, etc.) -----
@@ -141,7 +154,7 @@ def fetch_stock_quote(ticker: str) -> StockQuoteResponse:
     """
     Fetch real-time quote for a stock from Finnhub.
     Returns current price, change, percent change, and session OHLC.
-    Raises HTTPException on error. Uses cache.
+    Uses cache. Falls back to zero prices on error (no crash).
     """
     ticker_upper = ticker.upper().strip()
     if not ticker_upper:
@@ -153,35 +166,78 @@ def fetch_stock_quote(ticker: str) -> StockQuoteResponse:
 
     api_key = settings.FINNHUB_API_KEY
     if not api_key:
-        raise HTTPException(
-            status_code=500,
-            detail="FINNHUB_API_KEY is not configured on the server.",
+        # Fall back to default quote on API key missing
+        import logging
+        logging.getLogger(__name__).warning(f"FINNHUB_API_KEY not configured, returning default quote for {ticker_upper}")
+        response = StockQuoteResponse(
+            ticker=ticker_upper,
+            price=0.0,
+            change=0.0,
+            percent_change=0.0,
+            high=0.0,
+            low=0.0,
+            open=0.0,
+            previous_close=0.0,
         )
+        _quote_cache_set(ticker_upper, response)
+        return response
 
-    url = "https://finnhub.io/api/v1/quote"
-    params = {"symbol": ticker_upper, "token": api_key}
-    data = _finnhub_get(url, params, ticker_upper)
+    try:
+        url = "https://finnhub.io/api/v1/quote"
+        params = {"symbol": ticker_upper, "token": api_key}
+        data = _finnhub_get(url, params, ticker_upper)
 
-    # Finnhub quote: c, d, dp, h, l, o, pc (current, change, percent change, high, low, open, previous close)
-    c = data.get("c")
-    if c is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No quote data available for ticker '{ticker_upper}'. The ticker may be invalid or delisted.",
+        # Finnhub quote: c, d, dp, h, l, o, pc (current, change, percent change, high, low, open, previous close)
+        c = data.get("c")
+        if c is None:
+            # No data available, return safe default
+            import logging
+            logging.getLogger(__name__).warning(f"No quote data for {ticker_upper}, returning default")
+            response = StockQuoteResponse(
+                ticker=ticker_upper,
+                price=0.0,
+                change=0.0,
+                percent_change=0.0,
+                high=0.0,
+                low=0.0,
+                open=0.0,
+                previous_close=0.0,
+            )
+            _quote_cache_set(ticker_upper, response)
+            return response
+
+        response = StockQuoteResponse(
+            ticker=ticker_upper,
+            price=float(c),
+            change=float(data.get("d") or 0),
+            percent_change=float(data.get("dp") or 0),
+            high=float(data.get("h") or 0),
+            low=float(data.get("l") or 0),
+            open=float(data.get("o") or 0),
+            previous_close=float(data.get("pc") or 0),
         )
-
-    response = StockQuoteResponse(
-        ticker=ticker_upper,
-        price=float(c),
-        change=float(data.get("d") or 0),
-        percent_change=float(data.get("dp") or 0),
-        high=float(data.get("h") or 0),
-        low=float(data.get("l") or 0),
-        open=float(data.get("o") or 0),
-        previous_close=float(data.get("pc") or 0),
-    )
-    _quote_cache_set(ticker_upper, response)
-    return response
+        _quote_cache_set(ticker_upper, response)
+        return response
+    
+    except HTTPException:
+        # Re-raise rate limit and auth errors
+        raise
+    except Exception as e:
+        # All other errors: return safe default instead of crashing
+        import logging
+        logging.getLogger(__name__).warning(f"Error fetching quote for {ticker_upper}: {e}")
+        response = StockQuoteResponse(
+            ticker=ticker_upper,
+            price=0.0,
+            change=0.0,
+            percent_change=0.0,
+            high=0.0,
+            low=0.0,
+            open=0.0,
+            previous_close=0.0,
+        )
+        _quote_cache_set(ticker_upper, response)
+        return response
 
 
 # ----- Routes -----
@@ -200,6 +256,7 @@ def get_stock_data(
     """
     Fetch the last 30 days of daily price data for a given stock ticker from yfinance.
     Returns OHLCV (Open, High, Low, Close, Volume) data points.
+    Falls back to empty data if fetch fails (no crash).
     """
     ticker_upper = ticker.upper().strip()
     if not ticker_upper:
@@ -210,40 +267,57 @@ def get_stock_data(
         return cached
 
     try:
+        # Fetch data from yfinance - no signal.alarm() on Windows
+        # Wrap in try-catch for error handling
         yf_ticker = yf.Ticker(ticker_upper)
         df = yf_ticker.history(period="30d", interval="1d")
+            
     except Exception as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to fetch historical data for '{ticker_upper}': {str(e)}",
+        # Return empty data set on error instead of crashing
+        import logging
+        logging.getLogger(__name__).warning(f"yfinance error for {ticker_upper}: {e}")
+        response = StockDataResponse(
+            ticker=ticker_upper,
+            name=ticker_upper,
+            currency="USD",
+            period_days=0,
+            data_points=[],
         )
+        _candle_cache_set(ticker_upper, response)
+        return response
 
     if df is None or df.empty:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No historical price data available for ticker '{ticker_upper}'. The ticker may be invalid or delisted.",
+        # Return empty data set instead of 404 error
+        response = StockDataResponse(
+            ticker=ticker_upper,
+            name=ticker_upper,
+            currency="USD",
+            period_days=0,
+            data_points=[],
         )
+        _candle_cache_set(ticker_upper, response)
+        return response
 
     # yfinance DataFrame: index is DatetimeIndex, columns are Open, High, Low, Close, Volume
     data_points: List[PriceDataPoint] = []
-    for idx, row in df.iterrows():
-        date_str = idx.strftime("%Y-%m-%d")
-        data_points.append(
-            PriceDataPoint(
-                date=date_str,
-                open=float(row["Open"]),
-                high=float(row["High"]),
-                low=float(row["Low"]),
-                close=float(row["Close"]),
-                volume=int(row["Volume"]) if row["Volume"] == row["Volume"] else 0,  # NaN check for missing volume
+    try:
+        for idx, row in df.iterrows():
+            date_str = idx.strftime("%Y-%m-%d")
+            data_points.append(
+                PriceDataPoint(
+                    date=date_str,
+                    open=float(row["Open"]),
+                    high=float(row["High"]),
+                    low=float(row["Low"]),
+                    close=float(row["Close"]),
+                    volume=int(row["Volume"]) if row["Volume"] == row["Volume"] else 0,  # NaN check for missing volume
+                )
             )
-        )
-
-    if not data_points:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No historical price data available for ticker '{ticker_upper}'. The ticker may be invalid or delisted.",
-        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Error parsing yfinance data for {ticker_upper}: {e}")
+        # Return what we have so far
+        pass
 
     response = StockDataResponse(
         ticker=ticker_upper,

@@ -1,4 +1,4 @@
-// File: D:\stock sentinal\frontend\app\watchlist\page.tsx
+// File: C:\Users\acer\Downloads\stock sentinal\frontend\app\watchlist\page.tsx
 import * as entry from '../../../../app/watchlist/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

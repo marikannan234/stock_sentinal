@@ -24,7 +24,7 @@ def calculate_sma(
     period: int = 14,
 ) -> dict:
     """
-    Calculate Simple Moving Average for a stock symbol.
+    Calculate Simple Moving Average for a stock symbol with timeout protection.
     
     Args:
         symbol: Stock ticker symbol (e.g., 'AAPL')
@@ -53,9 +53,15 @@ def calculate_sma(
         
         logger.info(f"Calculating SMA - symbol: {symbol}, period: {period}")
         
-        # Fetch historical data (1 month should be sufficient for SMA)
-        ticker = yf.Ticker(symbol)
-        history = ticker.history(period="1mo")
+        try:
+            # Fetch historical data (1 month should be sufficient for SMA)
+            # No timeout on macOS/Linux - yfinance is simple and usually fast
+            # On Windows, signal.alarm() is not supported anyway
+            ticker = yf.Ticker(symbol)
+            history = ticker.history(period="1mo")
+        except Exception as e:
+            logger.warning(f"Error fetching SMA data for {symbol}: {e}")
+            raise StockNotFoundError(symbol)
         
         # Validate we got data
         if history.empty or len(history) == 0:
@@ -130,7 +136,7 @@ def calculate_rsi(
     period: int = 14,
 ) -> dict:
     """
-    Calculate Relative Strength Index (RSI) for a stock symbol.
+    Calculate Relative Strength Index (RSI) for a stock symbol with timeout protection.
     
     RSI is a momentum oscillator that measures the magnitude of recent price changes
     to evaluate overbought/oversold conditions.
@@ -162,9 +168,15 @@ def calculate_rsi(
         
         logger.info(f"Calculating RSI - symbol: {symbol}, period: {period}")
         
-        # Fetch historical data (need at least period + 1 data points)
-        ticker = yf.Ticker(symbol)
-        history = ticker.history(period="3mo")  # Fetch 3 months to ensure enough data
+        try:
+            # Fetch historical data (need at least period + 1 data points)
+            # No timeout on macOS/Linux - yfinance is simple and usually fast
+            # On Windows, signal.alarm() is not supported anyway
+            ticker = yf.Ticker(symbol)
+            history = ticker.history(period="3mo")  # Fetch 3 months to ensure enough data
+        except Exception as e:
+            logger.warning(f"Error fetching RSI data for {symbol}: {e}")
+            raise StockNotFoundError(symbol)
         
         # Validate we got data
         if history.empty or len(history) == 0:

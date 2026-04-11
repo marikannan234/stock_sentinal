@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     ENABLE_EMAIL_NOTIFICATIONS: bool = True
     EMAIL_NOTIFICATION_RETRY_COUNT: int = 3
 
+    # WhatsApp Configuration (Twilio)
+    ENABLE_WHATSAPP_NOTIFICATIONS: bool = False  # Set to True to enable WhatsApp alerts
+    TWILIO_ACCOUNT_SID: str | None = None
+    TWILIO_AUTH_TOKEN: str | None = None
+    TWILIO_WHATSAPP_NUMBER: str | None = None  # e.g., "+14155238886"
+
     # Alert Configuration
     ALERT_COOLDOWN_MINUTES: int = 10  # Minutes between duplicate alert sends
     ALERT_DEV_MODE: bool = False  # Skip cooldown for testing (set to True locally)
