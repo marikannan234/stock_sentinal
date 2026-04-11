@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface PortfolioPriceUpdate {
   symbol: string;
@@ -15,43 +15,34 @@ export interface PortfolioPriceUpdate {
 
 type PriceUpdateCallback = (update: PortfolioPriceUpdate) => void;
 
-const THROTTLE_DELAY_MS = 1000; // Max 1 update per second per symbol
-const MAX_RECONNECT_ATTEMPTS = 5; // Prevent infinite reconnect loops
+const THROTTLE_DELAY_MS = 1000;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
-/**
- * Custom hook for managing WebSocket connections for real-time stock prices.
- * Handles auto-reconnect, multiple symbols, proper cleanup, and throttling.
- * 
- * Ensures:
- * - Only ONE WebSocket instance exists at a time
- * - No duplicate connections
- * - Proper cleanup on unmount
- * - No multiple reconnect timers
- */
 export function useWebSocketPrices(
   symbols: string[],
   onPriceUpdate: PriceUpdateCallback,
-  enabled: boolean = true
+  enabled: boolean = true,
 ) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectCountRef = useRef(0);
   const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastUpdateRef = useRef<Record<string, number>>({}); // Throttle tracking per symbol
-  const isUnmountedRef = useRef(false); // Track if component is unmounted
-  
-  // Connect function with proper singleton pattern
+  const lastUpdateRef = useRef<Record<string, number>>({});
+  const isUnmountedRef = useRef(false);
+
   const connect = useCallback(() => {
-    // If component is unmounted, don't reconnect
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     if (isUnmountedRef.current) {
       console.log('Component unmounted, skipping connection');
       return;
     }
 
-    // Check if already connected or connecting
     if (wsRef.current) {
       const state = wsRef.current.readyState;
       if (state === WebSocket.OPEN) {
@@ -62,7 +53,6 @@ export function useWebSocketPrices(
         console.log('WebSocket already connecting');
         return;
       }
-      // If CLOSED or CLOSING, ws will be recreated below
     }
 
     if (!enabled || symbols.length === 0) {
@@ -71,21 +61,19 @@ export function useWebSocketPrices(
     }
 
     try {
-      const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
+      const wsBaseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
       const symbol = symbols[0];
-      const wsUrl = `${WS_URL}/ws/stocks/${symbol}`;
+      const wsUrl = `${wsBaseUrl}/ws/stocks/${symbol}`;
 
       console.log(`Creating WebSocket connection to ${wsUrl}`);
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        // Check again if we're unmounted
         if (isUnmountedRef.current) {
           ws.close();
           return;
         }
 
-        // Check if this ws is still the current one (in case of race conditions)
         if (wsRef.current !== ws) {
           console.log('WebSocket instance mismatch, closing old connection');
           ws.close();
@@ -95,21 +83,19 @@ export function useWebSocketPrices(
         setConnected(true);
         setError(null);
         reconnectCountRef.current = 0;
-        console.log(`✅ WebSocket connected to ${symbol}`);
+        console.log(`WebSocket connected to ${symbol}`);
 
-        // Clear existing heartbeat
         if (heartbeatIntervalRef.current) {
           clearInterval(heartbeatIntervalRef.current);
         }
 
-        // Start heartbeat to keep connection alive
         heartbeatIntervalRef.current = setInterval(() => {
           try {
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: "ping" }));
+              ws.send(JSON.stringify({ type: 'ping' }));
             }
           } catch (err) {
-            console.error("Failed to send heartbeat:", err);
+            console.error('Failed to send heartbeat:', err);
           }
         }, 10000);
       };
@@ -117,13 +103,11 @@ export function useWebSocketPrices(
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data) as PortfolioPriceUpdate;
-
-          // Throttle updates: max 1 update per symbol per second
           const now = Date.now();
           const lastUpdate = lastUpdateRef.current[data.symbol] || 0;
 
           if (now - lastUpdate < THROTTLE_DELAY_MS) {
-            return; // Skip this update, rate limited
+            return;
           }
 
           lastUpdateRef.current[data.symbol] = now;
@@ -142,21 +126,17 @@ export function useWebSocketPrices(
 
       ws.onclose = () => {
         setConnected(false);
-        console.log(`⛔ WebSocket disconnected`);
+        console.log('WebSocket disconnected');
 
-        // Only reconnect if this is still the current ws and component is not unmounted
         if (wsRef.current === ws && !isUnmountedRef.current) {
-          // Clear heartbeat
           if (heartbeatIntervalRef.current) {
             clearInterval(heartbeatIntervalRef.current);
             heartbeatIntervalRef.current = null;
           }
 
-          // Auto-reconnect with exponential backoff
           if (enabled && reconnectCountRef.current < MAX_RECONNECT_ATTEMPTS) {
             const delay = Math.max(1000, Math.min(1000 * Math.pow(2, reconnectCountRef.current), 10000));
 
-            // Clear any existing reconnect timeout
             if (reconnectTimeoutRef.current) {
               clearTimeout(reconnectTimeoutRef.current);
             }
@@ -164,12 +144,12 @@ export function useWebSocketPrices(
             reconnectTimeoutRef.current = setTimeout(() => {
               reconnectCountRef.current++;
               if (reconnectCountRef.current <= MAX_RECONNECT_ATTEMPTS && !isUnmountedRef.current) {
-                console.log(`🔄 Auto-reconnecting (attempt ${reconnectCountRef.current}/${MAX_RECONNECT_ATTEMPTS}) in ${delay}ms...`);
+                console.log(`Auto-reconnecting (attempt ${reconnectCountRef.current}/${MAX_RECONNECT_ATTEMPTS}) in ${delay}ms...`);
                 connect();
               }
             }, delay);
           } else if (reconnectCountRef.current >= MAX_RECONNECT_ATTEMPTS) {
-            console.warn(`❌ Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached`);
+            console.warn(`Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached`);
             setError(`Failed to connect after ${MAX_RECONNECT_ATTEMPTS} attempts`);
           }
         }
@@ -184,32 +164,30 @@ export function useWebSocketPrices(
     }
   }, [enabled, symbols, onPriceUpdate]);
 
-  // Setup and cleanup
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     isUnmountedRef.current = false;
 
-    // Initial connection
     if (enabled && symbols.length > 0) {
       connect();
     }
 
-    // Cleanup on unmount or when disabled
     return () => {
       isUnmountedRef.current = true;
 
-      // Clear heartbeat interval
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = null;
       }
 
-      // Clear reconnect timeout
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
 
-      // Close WebSocket
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -222,27 +200,25 @@ export function useWebSocketPrices(
   return {
     connected,
     error,
-    // Allow manual reconnect
     reconnect: useCallback(() => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+
       isUnmountedRef.current = false;
       reconnectCountRef.current = 0;
 
-      // Clear heartbeat
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = null;
       }
 
-      // Close current connection
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
 
-      // Reconnect
       connect();
     }, [connect]),
-  };
-}
   };
 }

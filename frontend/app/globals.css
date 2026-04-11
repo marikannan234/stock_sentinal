@@ -19,22 +19,34 @@
   --outline: #424754;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 html,
 body {
   margin: 0;
+  width: 100%;
   min-height: 100%;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at top left, rgba(77, 142, 255, 0.08), transparent 30%),
     radial-gradient(circle at bottom right, rgba(78, 222, 163, 0.05), transparent 28%),
     var(--surface);
 }
 
+html {
+  height: 100%;
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
+  position: relative;
   font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
   color: var(--on-surface);
 }
 
@@ -48,6 +60,14 @@ textarea,
 select,
 button {
   font: inherit;
+}
+
+img,
+svg,
+canvas,
+video {
+  display: block;
+  max-width: 100%;
 }
 
 .ticker-wrap {
@@ -69,17 +89,29 @@ button {
 }
 
 @keyframes ticker-scroll {
-  0%   { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .animate-spin {

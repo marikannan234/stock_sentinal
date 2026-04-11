@@ -1,26 +1,24 @@
 /**
- * Hook for real-time alert WebSocket notifications
- * 
- * Usage:
- *   const { isConnected } = useAlertNotifications();
- *   // Automatically handles WebSocket connection and toast notifications
+ * Hook for real-time alert WebSocket notifications.
+ * Browser-only behavior is deferred until after mount.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 export const useAlertNotifications = () => {
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval>>();
   const isConnectingRef = useRef(false);
-
-  // Connect function - stable reference using useRef to avoid dependency cycles
   const connectRef = useRef<() => void>(() => {});
+  const [isConnected, setIsConnected] = useState(false);
 
-  // Initialize connect function
   connectRef.current = () => {
-    // Prevent multiple connection attempts - check if already connecting or connected
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     if (isConnectingRef.current) {
       console.log('Connection already in progress');
       return;
@@ -31,7 +29,6 @@ export const useAlertNotifications = () => {
       return;
     }
 
-    // Close any existing connection in CONNECTING state
     if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
       console.log('Closing existing CONNECTING WebSocket');
       wsRef.current.close();
@@ -41,37 +38,33 @@ export const useAlertNotifications = () => {
     isConnectingRef.current = true;
 
     try {
-      // Use the dedicated WebSocket URL from environment, or construct it
       let wsUrl = process.env.NEXT_PUBLIC_WS_URL;
-      
+
       if (!wsUrl) {
-        // Fallback: construct from API URL by replacing http with ws
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
         wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
       }
-      
+
       wsUrl = `${wsUrl}/ws/alerts`;
-      
+
       console.log('Connecting to WebSocket:', wsUrl);
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        console.log('✅ Connected to alert notifications');
+        console.log('Connected to alert notifications');
         isConnectingRef.current = false;
+        setIsConnected(true);
         wsRef.current = ws;
-        
-        // Clear any pending reconnection attempts
+
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = undefined;
         }
 
-        // Clear any existing heartbeat interval
         if (heartbeatIntervalRef.current) {
           clearInterval(heartbeatIntervalRef.current);
         }
 
-        // Send heartbeat every 30 seconds to keep connection alive
         heartbeatIntervalRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
             try {
@@ -88,13 +81,12 @@ export const useAlertNotifications = () => {
           const data = JSON.parse(event.data);
 
           if (data.type === 'alert') {
-            console.log('🔔 Alert received:', data);
+            console.log('Alert received:', data);
 
-            // Show toast notification
             toast.success(data.message || 'Alert triggered!', {
               duration: 5000,
               position: 'top-right',
-              icon: '🔔',
+              icon: '!',
               style: {
                 background: '#10b981',
                 color: '#fff',
@@ -104,10 +96,9 @@ export const useAlertNotifications = () => {
               },
             });
 
-            // You can also trigger a sound notification here
             playAlertSound();
           } else if (data.type === 'pong') {
-            console.log('💓 Heartbeat pong received');
+            console.log('Heartbeat pong received');
           }
         } catch (error) {
           console.error('Error parsing alert message:', error);
@@ -115,37 +106,36 @@ export const useAlertNotifications = () => {
       };
 
       ws.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
+        console.error('WebSocket error:', error);
         isConnectingRef.current = false;
+        setIsConnected(false);
 
-        // Show error toast
         toast.error('Connection error with alert service', {
           duration: 3000,
           position: 'top-right',
-          icon: '⚠️',
+          icon: '!',
         });
       };
 
       ws.onclose = () => {
-        console.log('⛔ Disconnected from alert notifications');
+        console.log('Disconnected from alert notifications');
         isConnectingRef.current = false;
+        setIsConnected(false);
 
-        // Clear heartbeat interval
         if (heartbeatIntervalRef.current) {
           clearInterval(heartbeatIntervalRef.current);
           heartbeatIntervalRef.current = undefined;
         }
 
-        // Only reconnect if we haven't been manually disconnected
         if (wsRef.current === ws) {
           wsRef.current = null;
-          
-          // Attempt to reconnect after 3 seconds
+
           if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
           }
+
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('🔄 Attempting to reconnect to alerts...');
+            console.log('Attempting to reconnect to alerts...');
             connectRef.current();
           }, 3000);
         }
@@ -153,23 +143,26 @@ export const useAlertNotifications = () => {
     } catch (error) {
       console.error('Error establishing WebSocket connection:', error);
       isConnectingRef.current = false;
+      setIsConnected(false);
 
-      // Retry connection after 3 seconds
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+
       reconnectTimeoutRef.current = setTimeout(() => {
         connectRef.current();
       }, 3000);
     }
   };
 
-  // Connect on mount, disconnect on unmount
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     connectRef.current();
 
     return () => {
-      // Cleanup on unmount
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = undefined;
@@ -186,11 +179,12 @@ export const useAlertNotifications = () => {
       }
 
       isConnectingRef.current = false;
+      setIsConnected(false);
     };
   }, []);
 
   return {
-    isConnected: wsRef.current?.readyState === WebSocket.OPEN,
+    isConnected,
     connect: () => connectRef.current(),
     disconnect: () => {
       if (heartbeatIntervalRef.current) {
@@ -209,25 +203,24 @@ export const useAlertNotifications = () => {
       }
 
       isConnectingRef.current = false;
+      setIsConnected(false);
     },
   };
 };
 
-/**
- * Play a subtle alert sound
- * Optional: Remove or replace with your own sound
- */
 const playAlertSound = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
   try {
-    // Create a simple beep using Web Audio API
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const audioContext = new (window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
 
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
 
-    // Set frequency and duration for a pleasant "ding"
     oscillator.frequency.value = 800;
     oscillator.type = 'sine';
 

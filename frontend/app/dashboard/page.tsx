@@ -174,19 +174,19 @@ export default function DashboardPage() {
               <h2 className="mb-4 text-sm font-bold text-white">Quick Links</h2>
               <div className="space-y-2">
                 <Link href="/portfolio" className="flex items-center gap-3 rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--surface-high)] transition-colors">
-                  <span className="material-symbols-outlined text-[18px] text-[var(--primary)]">pie_chart</span>
+                  <Icon name="pie_chart" className="text-[18px] text-[var(--primary)]" />
                   Portfolio
                 </Link>
                 <Link href="/alerts" className="flex items-center gap-3 rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--surface-high)] transition-colors">
-                  <span className="material-symbols-outlined text-[18px] text-[var(--primary)]">notifications_active</span>
+                  <Icon name="notifications_active" className="text-[18px] text-[var(--primary)]" />
                   Manage Alerts
                 </Link>
                 <Link href="/news" className="flex items-center gap-3 rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--surface-high)] transition-colors">
-                  <span className="material-symbols-outlined text-[18px] text-[var(--primary)]">article</span>
+                  <Icon name="article" className="text-[18px] text-[var(--primary)]" />
                   News Feed
                 </Link>
                 <Link href="/trade-history" className="flex items-center gap-3 rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--surface-high)] transition-colors">
-                  <span className="material-symbols-outlined text-[18px] text-[var(--primary)]">history</span>
+                  <Icon name="history" className="text-[18px] text-[var(--primary)]" />
                   Trade History
                 </Link>
               </div>

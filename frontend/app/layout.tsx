@@ -1,7 +1,5 @@
-'use client';
-
 import './globals.css';
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { ToastProvider } from '@/components/ui/toast';
 import { SessionBootstrap } from '@/components/session-bootstrap';
 import { AlertBootstrap } from '@/components/alert-bootstrap';
@@ -9,8 +7,6 @@ import { AlertBootstrap } from '@/components/alert-bootstrap';
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <head>
-      </head>
       <body className="bg-[var(--surface)] font-sans text-[var(--on-surface)] antialiased">
         <ToastProvider>
           <SessionBootstrap />

@@ -9,6 +9,11 @@ from typing import Optional
 
 from app.config import settings
 
+try:
+    from twilio.rest import Client
+except ImportError:  # pragma: no cover - handled gracefully at runtime
+    Client = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,6 +40,10 @@ def send_whatsapp_alert(
         True if SMS sent successfully, False otherwise
     """
     try:
+        if Client is None:
+            logger.error("Twilio SDK is not installed in the active Python environment")
+            return False
+
         # Check if WhatsApp notifications are enabled
         if not settings.ENABLE_WHATSAPP_NOTIFICATIONS:
             logger.debug("WhatsApp notifications disabled")
@@ -44,9 +53,6 @@ def send_whatsapp_alert(
         if not phone_number or not phone_number.startswith("+"):
             logger.warning(f"Invalid WhatsApp phone: {phone_number}")
             return False
-        
-        # Import Twilio here to avoid import errors if not installed
-        from twilio.rest import Client
         
         # Initialize Twilio client
         client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
@@ -108,6 +114,10 @@ def send_whatsapp_notification(
         True if sent successfully, False otherwise
     """
     try:
+        if Client is None:
+            logger.error("Twilio SDK is not installed in the active Python environment")
+            return False
+
         # Check if WhatsApp notifications are enabled
         if not settings.ENABLE_WHATSAPP_NOTIFICATIONS:
             logger.debug("WhatsApp notifications disabled")
@@ -121,9 +131,6 @@ def send_whatsapp_notification(
         if not message or len(message) == 0:
             logger.warning("Empty message")
             return False
-        
-        # Import Twilio
-        from twilio.rest import Client
         
         # Initialize Twilio client
         client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
