@@ -1,0 +1,198 @@
+{
+  "apis_tested": [],
+  "passed": [
+    "Health: Status Check",
+    "Auth: Register (Invalid Email)",
+    "Auth: Register (Weak Password)",
+    "Auth: Login (Empty Data)",
+    "News: Get All News",
+    "News: Get With Limit"
+  ],
+  "failed": [
+    "Auth: Login (Invalid Email): 422",
+    "Stock: Search (Empty Query): 502",
+    "Stock: Search (Invalid Chars): 502",
+    "Stock: Search (Valid - AAPL): 502",
+    "Stock: Quote (Invalid Symbol): 404",
+    "Stock: Quote (Valid - AAPL): 404",
+    "Stock: Indicators (Invalid Symbol): 404",
+    "Stock: Indicators (Valid - AAPL): 404",
+    "News: Invalid Limit: 422",
+    "News: Search (Empty): 200",
+    "Watchlist: Get All: 401",
+    "Watchlist: Add (No Symbol): 401",
+    "Watchlist: Add (Empty Symbol): 401",
+    "Portfolio: Get: 401",
+    "Alerts: Get All: 401",
+    "Alerts: Create (Missing Fields): 401",
+    "Alerts: Create (Invalid Symbol): 401",
+    "Alerts: Create (Invalid Condition): 401",
+    "Dashboard: Get Data: 404",
+    "Dashboard: Market Overview: 404"
+  ],
+  "warnings": [],
+  "performance": {
+    "Health: Status Check": {
+      "endpoint": "/api/health",
+      "method": "GET",
+      "response_time_ms": 868.0775165557861,
+      "status": 200
+    },
+    "Auth: Register (Invalid Email)": {
+      "endpoint": "/api/auth/register",
+      "method": "POST",
+      "response_time_ms": 90.2867317199707,
+      "status": 422
+    },
+    "Auth: Register (Weak Password)": {
+      "endpoint": "/api/auth/register",
+      "method": "POST",
+      "response_time_ms": 212.66984939575195,
+      "status": 422
+    },
+    "Auth: Login (Invalid Email)": {
+      "endpoint": "/api/auth/login",
+      "method": "POST",
+      "response_time_ms": 50.66323280334473,
+      "status": 422
+    },
+    "Auth: Login (Empty Data)": {
+      "endpoint": "/api/auth/login",
+      "method": "POST",
+      "response_time_ms": 27.70400047302246,
+      "status": 422
+    },
+    "Stock: Search (Empty Query)": {
+      "endpoint": "/api/stocks/search?q=",
+      "method": "GET",
+      "response_time_ms": 8200.695514678955,
+      "status": 502
+    },
+    "Stock: Search (Invalid Chars)": {
+      "endpoint": "/api/stocks/search?q=!!!###",
+      "method": "GET",
+      "response_time_ms": 3668.3716773986816,
+      "status": 502
+    },
+    "Stock: Search (Valid - AAPL)": {
+      "endpoint": "/api/stocks/search?q=AAPL",
+      "method": "GET",
+      "response_time_ms": 3167.247533798218,
+      "status": 502
+    },
+    "Stock: Quote (Invalid Symbol)": {
+      "endpoint": "/api/stocks/INVALID123/quote",
+      "method": "GET",
+      "response_time_ms": 25.317668914794922,
+      "status": 404
+    },
+    "Stock: Quote (Valid - AAPL)": {
+      "endpoint": "/api/stocks/AAPL/quote",
+      "method": "GET",
+      "response_time_ms": 19.660234451293945,
+      "status": 404
+    },
+    "Stock: Indicators (Invalid Symbol)": {
+      "endpoint": "/api/stocks/INVALID/indicators",
+      "method": "GET",
+      "response_time_ms": 16.009092330932617,
+      "status": 404
+    },
+    "Stock: Indicators (Valid - AAPL)": {
+      "endpoint": "/api/stocks/AAPL/indicators",
+      "method": "GET",
+      "response_time_ms": 19.002199172973633,
+      "status": 404
+    },
+    "News: Get All News": {
+      "endpoint": "/api/news",
+      "method": "GET",
+      "response_time_ms": 848.430871963501,
+      "status": 200
+    },
+    "News: Invalid Limit": {
+      "endpoint": "/api/news?limit=-1",
+      "method": "GET",
+      "response_time_ms": 39.58415985107422,
+      "status": 422
+    },
+    "News: Get With Limit": {
+      "endpoint": "/api/news?limit=10",
+      "method": "GET",
+      "response_time_ms": 43.40171813964844,
+      "status": 200
+    },
+    "News: Search (Empty)": {
+      "endpoint": "/api/news/search?q=",
+      "method": "GET",
+      "response_time_ms": 1233.5031032562256,
+      "status": 200
+    },
+    "Watchlist: Get All": {
+      "endpoint": "/api/watchlist",
+      "method": "GET",
+      "response_time_ms": 23.011207580566406,
+      "status": 401
+    },
+    "Watchlist: Add (No Symbol)": {
+      "endpoint": "/api/watchlist",
+      "method": "POST",
+      "response_time_ms": 25.43497085571289,
+      "status": 401
+    },
+    "Watchlist: Add (Empty Symbol)": {
+      "endpoint": "/api/watchlist",
+      "method": "POST",
+      "response_time_ms": 18.16248893737793,
+      "status": 401
+    },
+    "Portfolio: Get": {
+      "endpoint": "/api/portfolio",
+      "method": "GET",
+      "response_time_ms": 20.473003387451172,
+      "status": 401
+    },
+    "Alerts: Get All": {
+      "endpoint": "/api/alerts",
+      "method": "GET",
+      "response_time_ms": 21.109580993652344,
+      "status": 401
+    },
+    "Alerts: Create (Missing Fields)": {
+      "endpoint": "/api/alerts",
+      "method": "POST",
+      "response_time_ms": 23.481130599975586,
+      "status": 401
+    },
+    "Alerts: Create (Invalid Symbol)": {
+      "endpoint": "/api/alerts",
+      "method": "POST",
+      "response_time_ms": 27.49037742614746,
+      "status": 401
+    },
+    "Alerts: Create (Invalid Condition)": {
+      "endpoint": "/api/alerts",
+      "method": "POST",
+      "response_time_ms": 16.447067260742188,
+      "status": 401
+    },
+    "Dashboard: Get Data": {
+      "endpoint": "/api/dashboard",
+      "method": "GET",
+      "response_time_ms": 14.589309692382812,
+      "status": 404
+    },
+    "Dashboard: Market Overview": {
+      "endpoint": "/api/dashboard/market-overview",
+      "method": "GET",
+      "response_time_ms": 16.627073287963867,
+      "status": 404
+    }
+  },
+  "test_summary": {
+    "total": 26,
+    "passed": 6,
+    "failed": 20,
+    "warnings": 0
+  }
+}

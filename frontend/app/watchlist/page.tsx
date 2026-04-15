@@ -5,15 +5,18 @@ import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard } from '@/components/sentinel/primitives';
 import { marketService, watchlistService } from '@/lib/api-service';
+import { useMarketStore } from '@/lib/store-v2';
 import type { LiveQuote, MarketSummary } from '@/lib/types';
 import { formatCompactNumber, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
 export default function WatchlistPage() {
   const [symbols, setSymbols] = useState<string[]>([]);
   const [quotes, setQuotes] = useState<LiveQuote[]>([]);
-  const [marketSummary, setMarketSummary] = useState<MarketSummary | null>(null);
-  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
   const [symbolInput, setSymbolInput] = useState('');
+
+  // Use global store for market data (no polling needed - DataSyncProvider handles it)
+  const market = useMarketStore((state) => state.market);
+  const ribbon = useMarketStore((state) => state.ribbon);
 
   const refreshWatchlist = useCallback(async () => {
     const watchlist = await watchlistService.list();
@@ -23,13 +26,8 @@ export default function WatchlistPage() {
   }, []);
 
   useEffect(() => {
-    Promise.allSettled([refreshWatchlist(), marketService.getMarketSummary(), marketService.getLiveRibbon()]).then((results) => {
-      const summaryResult = results[1];
-      const ribbonResult = results[2];
-      if (summaryResult.status === 'fulfilled') setMarketSummary(summaryResult.value);
-      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks.slice(0, 8));
-    });
-  }, []);
+    void refreshWatchlist();
+  }, [refreshWatchlist]);
 
   const handleAdd = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -81,29 +79,37 @@ export default function WatchlistPage() {
             <SurfaceCard className="p-5">
               <h3 className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-white">Top Gainers</h3>
               <div className="space-y-4">
-                {marketSummary?.top_gainers.slice(0, 5).map((item) => (
-                  <div key={item.symbol} className="flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-white">{item.symbol}</p>
-                      <p className="text-[10px] text-[var(--on-surface-variant)]">Live market</p>
+                {market && Array.isArray(market.top_gainers) && market.top_gainers.length > 0 ? (
+                  market.top_gainers.slice(0, 5).map((item) => (
+                    <div key={item.symbol} className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-white">{item.symbol}</p>
+                        <p className="text-[10px] text-[var(--on-surface-variant)]">Live market</p>
+                      </div>
+                      <span className="font-mono text-secondary">{formatPercent(item.change_percent)}</span>
                     </div>
-                    <span className="font-mono text-secondary">{formatPercent(item.change_percent)}</span>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-xs text-[var(--on-surface-variant)]">No gainers available</p>
+                )}
               </div>
             </SurfaceCard>
             <SurfaceCard className="p-5">
               <h3 className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-white">Top Losers</h3>
               <div className="space-y-4">
-                {marketSummary?.top_losers.slice(0, 3).map((item) => (
-                  <div key={item.symbol} className="flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-white">{item.symbol}</p>
-                      <p className="text-[10px] text-[var(--on-surface-variant)]">Live market</p>
+                {market && Array.isArray(market.top_losers) && market.top_losers.length > 0 ? (
+                  market.top_losers.slice(0, 3).map((item) => (
+                    <div key={item.symbol} className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-white">{item.symbol}</p>
+                        <p className="text-[10px] text-[var(--on-surface-variant)]">Live market</p>
+                      </div>
+                      <span className="font-mono text-tertiary">{formatPercent(item.change_percent)}</span>
                     </div>
-                    <span className="font-mono text-tertiary">{formatPercent(item.change_percent)}</span>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-xs text-[var(--on-surface-variant)]">No losers available</p>
+                )}
               </div>
             </SurfaceCard>
           </div>

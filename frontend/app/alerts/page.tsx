@@ -5,6 +5,7 @@ import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard } from '@/components/sentinel/primitives';
 import { alertService, marketService, getErrorMessage } from '@/lib/api-service';
+import { useMarketStore } from '@/lib/store-v2';
 import type { AlertItem, LiveQuote } from '@/lib/types';
 import { formatDateLabel } from '@/lib/sentinel-utils';
 
@@ -39,8 +40,10 @@ function getAlertTypeIcon(type: string): string {
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
-  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
   const [loadError, setLoadError] = useState('');
+
+  // Use global store for ribbon (no polling needed - DataSyncProvider handles it)
+  const ribbon = useMarketStore((state) => state.ribbon);
 
   // Form state
   const [symbol, setSymbol] = useState('');
@@ -61,8 +64,8 @@ export default function AlertsPage() {
   }
 
   useEffect(() => {
-    Promise.allSettled([loadAlerts(), marketService.getLiveRibbon()]).then(([_, ribbonResult]) => {
-      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks);
+    Promise.allSettled([loadAlerts()]).then(() => {
+      // Alerts are now loaded; ribbon is globally managed by DataSyncProvider
     });
   }, []);
 

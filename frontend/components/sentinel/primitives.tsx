@@ -67,13 +67,26 @@ function parseSizeFromClass(className?: string): number {
 
 export function Icon({ name, className }: { name: string; className?: string }) {
   const IconComponent = iconMap[name];
+  
+  // If icon not found, return null (never return text)
   if (!IconComponent) {
     console.warn(`Icon "${name}" not found in lucide-react mapping`);
     return null;
   }
+  
   const size = parseSizeFromClass(className);
-  const classNameWithoutSize = className?.replace(/text-\[\d+px\]|text-(xs|sm|base|lg|xl|2xl|3xl|4xl)/g, '').trim();
-  return <IconComponent size={size} className={cn('inline-block', classNameWithoutSize)} />;
+  const classNameWithoutSize = className?.replace(/text-\[\d+px\]|text-(xs|sm|base|lg|xl|2xl|3xl|4xl)/g, '').trim() || '';
+  
+  // Ensure color is always applied (default to white)
+  const hasColorClass = /text-|fill-|stroke-|color-/.test(classNameWithoutSize);
+  const finalClassName = cn(
+    'inline-block',
+    classNameWithoutSize,
+    !hasColorClass && 'text-white'
+  );
+  
+  // Always return the icon component, never text
+  return <IconComponent size={size} className={finalClassName} />;
 }
 
 export function SurfaceCard({

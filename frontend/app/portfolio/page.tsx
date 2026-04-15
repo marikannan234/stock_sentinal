@@ -7,11 +7,11 @@ import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard, Icon } from '@/components/sentinel/primitives';
 import { ErrorBoundary } from '@/components/sentinel/error-boundary';
 import { marketService, portfolioService, getErrorMessage } from '@/lib/api-service';
-import { useWebSocketPrices } from '@/hooks/useWebSocketPrices';
 import type { LiveQuote, PortfolioAllocationResponse, PortfolioGrowthPoint, PortfolioHolding, PortfolioSummary, SymbolSearchItem } from '@/lib/types';
 import { formatCurrency, formatPercent, exportToCSV } from '@/lib/sentinel-utils';
 
 const ranges: Array<'1d' | '1w' | '1m' | '1y'> = ['1d', '1w', '1m', '1y'];
+const roundValue = (value: number) => Math.round(value * 100) / 100;
 
 export default function PortfolioPage() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
@@ -19,7 +19,6 @@ export default function PortfolioPage() {
   const [allocation, setAllocation] = useState<PortfolioAllocationResponse | null>(null);
   const [growth, setGrowth] = useState<PortfolioGrowthPoint[]>([]);
   const [range, setRange] = useState<'1d' | '1w' | '1m' | '1y'>('1y');
-  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
   const [loadingPortfolio, setLoadingPortfolio] = useState(true);
   const [loadingGrowth, setLoadingGrowth] = useState(false);
 
@@ -107,29 +106,40 @@ export default function PortfolioPage() {
     setAddError('');
   }
 
-  // Parallel API calls (Performance: Promise.all instead of sequential)
-  async function loadPortfolio() {
-    setLoadingPortfolio(true);
-    try {
-      const [summaryResult, holdingsResult, allocationResult, ribbonResult] = await Promise.all([
-        portfolioService.summary(),
-        portfolioService.list(),
-        portfolioService.allocation(),
-        marketService.getLiveRibbon(),
-      ]);
-      setSummary(summaryResult);
-      setHoldings(holdingsResult);
-      setAllocation(allocationResult);
-      setRibbon(ribbonResult.stocks);
-    } catch (err) {
-      console.error('Failed to load portfolio:', err);
-    } finally {
-      setLoadingPortfolio(false);
-    }
-  }
-
+  // Portfolio data loading once on mount
   useEffect(() => {
-    loadPortfolio();
+    let isMounted = true;
+
+    const loadPortfolioData = async () => {
+      if (!isMounted) return;
+
+      try {
+        setLoadingPortfolio(true);
+        const [summaryResult, holdingsResult, allocationResult] = await Promise.all([
+          portfolioService.summary(),
+          portfolioService.list(),
+          portfolioService.allocation(),
+        ]);
+        if (isMounted) {
+          setSummary(summaryResult);
+          setHoldings(holdingsResult);
+          setAllocation(allocationResult);
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.warn('Failed to fetch portfolio:', error);
+        }
+      } finally {
+        if (isMounted) setLoadingPortfolio(false);
+      }
+    };
+
+    // Initial load only
+    void loadPortfolioData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Load growth data on range change with loading state and caching
@@ -148,8 +158,7 @@ export default function PortfolioPage() {
         const result = await portfolioService.growth(range);
         growthCacheRef.current[range] = result; // Cache result for this range
         setGrowth(result);
-      } catch (err) {
-        console.error('Failed to load growth data:', err);
+      } catch {
         setGrowth([]);
       } finally {
         setLoadingGrowth(false);
@@ -158,58 +167,47 @@ export default function PortfolioPage() {
     loadGrowthData();
   }, [range]);
 
-  // WebSocket real-time price updates for portfolio holdings
-  // Throttle to prevent excessive re-renders (max 1 update per second per symbol)
-  const lastUpdateRef = useRef<Record<string, number>>({});
-  const throttleDelayMs = 1000;
-  const symbolsToWatch = useMemo(() => holdings.map(h => h.ticker), [holdings]);
-  
-  const handlePriceUpdate = useCallback((update: any) => {
-    const now = Date.now();
-    const lastUpdate = lastUpdateRef.current[update.symbol] || 0;
-    
-    // Skip if updated within throttle window
-    if (now - lastUpdate < throttleDelayMs) return;
-    lastUpdateRef.current[update.symbol] = now;
-    
-    // Selective update: only change the specific holding (avoid full map)
-    setHoldings(prev => {
-      const holdingIndex = prev.findIndex(h => (h.ticker || "").toUpperCase() === (update.symbol || "").toUpperCase());
-      if (holdingIndex === -1) return prev;
-      
-      const updatedHolding = {
-        ...prev[holdingIndex],
-        current_price: update.price,
-        day_change_percent: update.change_percent,
-        // Recalculate P&L based on new price
-        pl_amount: (update.price - prev[holdingIndex].average_price) * prev[holdingIndex].quantity,
-        pl_percent: ((update.price - prev[holdingIndex].average_price) / prev[holdingIndex].average_price) * 100,
-      };
-      
-      // Only return new array if data actually changed
-      if (JSON.stringify(prev[holdingIndex]) === JSON.stringify(updatedHolding)) return prev;
-      
-      const newHoldings = [...prev];
-      newHoldings[holdingIndex] = updatedHolding;
-      return newHoldings;
-    });
-  }, []);
-
-  const { connected: wsConnected } = useWebSocketPrices(
-    symbolsToWatch,
-    handlePriceUpdate,
-    symbolsToWatch.length > 0
-  );
-
   // Listen for trade completion events to refresh portfolio and growth
   useEffect(() => {
-    const handleTradeCompleted = () => {
-      // Refresh portfolio data after trade
-      loadPortfolio();
+    const handleTradeCompleted = async () => {
+      // Refresh portfolio on trade
+      try {
+        const [summaryResult, holdingsResult, allocationResult] = await Promise.all([
+          portfolioService.summary(),
+          portfolioService.list(),
+          portfolioService.allocation(),
+        ]);
+        setSummary(summaryResult);
+        setHoldings(holdingsResult);
+        setAllocation(allocationResult);
+      } catch (error) {
+        console.warn('Failed to refresh portfolio after trade:', error);
+      }
+
+      // Refresh again after 500ms for consistency
+      window.setTimeout(async () => {
+        try {
+          const [summaryResult, holdingsResult, allocationResult] = await Promise.all([
+            portfolioService.summary(),
+            portfolioService.list(),
+            portfolioService.allocation(),
+          ]);
+          setSummary(summaryResult);
+          setHoldings(holdingsResult);
+          setAllocation(allocationResult);
+        } catch (error) {
+          console.warn('Failed to refresh portfolio after 500ms:', error);
+        }
+      }, 500);
+
       // Refresh growth data
-      portfolioService.growth(range)
-        .then(setGrowth)
-        .catch(err => console.error('Failed to refresh growth:', err));
+      try {
+        const result = await portfolioService.growth(range);
+        growthCacheRef.current[range] = result;
+        setGrowth(result);
+      } catch (error) {
+        console.warn('Failed to refresh growth after trade:', error);
+      }
     };
 
     window.addEventListener('tradeCompleted', handleTradeCompleted);
@@ -223,15 +221,124 @@ export default function PortfolioPage() {
       return;
     }
     if (!addQty || !addPrice) return;
+
+    const quantity = Number(addQty);
+    const price = Number(addPrice);
+    const normalizedSymbol = symbolValidated.toUpperCase();
+    const previousHoldings = holdings;
+    const previousSummary = summary;
+    const existingHolding = holdings.find((holding) => holding.ticker.toUpperCase() === normalizedSymbol);
+    const optimisticCurrentPrice = existingHolding?.current_price ?? price;
+    const optimisticHoldings = existingHolding
+      ? holdings.map((holding) => {
+          if (holding.ticker.toUpperCase() !== normalizedSymbol) {
+            return holding;
+          }
+
+          const nextQuantity = holding.quantity + quantity;
+          const nextAveragePrice = ((holding.quantity * holding.average_price) + (quantity * price)) / nextQuantity;
+          const nextCurrentValue = nextQuantity * optimisticCurrentPrice;
+          const nextInvestedAmount = nextQuantity * nextAveragePrice;
+          const nextPlAmount = nextCurrentValue - nextInvestedAmount;
+          const nextPlPercent = nextInvestedAmount > 0 ? (nextPlAmount / nextInvestedAmount) * 100 : 0;
+
+          return {
+            ...holding,
+            quantity: roundValue(nextQuantity),
+            average_price: roundValue(nextAveragePrice),
+            current_price: roundValue(optimisticCurrentPrice),
+            current_value: roundValue(nextCurrentValue),
+            invested_amount: roundValue(nextInvestedAmount),
+            pl_amount: roundValue(nextPlAmount),
+            pl_percent: roundValue(nextPlPercent),
+          };
+        })
+      : [
+          {
+            ticker: normalizedSymbol,
+            quantity,
+            average_price: price,
+            current_price: price,
+            current_value: roundValue(quantity * price),
+            invested_amount: roundValue(quantity * price),
+            pl_amount: 0,
+            pl_percent: 0,
+            day_change: 0,
+            day_change_percent: 0,
+            name: symbolName || normalizedSymbol,
+            asset_class: 'Technology',
+          },
+          ...holdings,
+        ];
+
+    const optimisticInvestedIncrement = quantity * price;
+    const optimisticCurrentIncrement = quantity * optimisticCurrentPrice;
+
+    setHoldings(optimisticHoldings);
+    setSummary((currentSummary) => {
+      if (!currentSummary) {
+        return currentSummary;
+      }
+
+      const nextTotalInvested = roundValue(currentSummary.total_invested + optimisticInvestedIncrement);
+      const nextCurrentValue = roundValue(currentSummary.current_value + optimisticCurrentIncrement);
+      const nextTotalPl = roundValue(nextCurrentValue - nextTotalInvested);
+      const nextPercentPl = nextTotalInvested > 0 ? roundValue((nextTotalPl / nextTotalInvested) * 100) : 0;
+      const baseForDayPercent = nextCurrentValue - currentSummary.day_pl;
+      const nextDayPercent = baseForDayPercent > 0 ? roundValue((currentSummary.day_pl / baseForDayPercent) * 100) : 0;
+
+      return {
+        ...currentSummary,
+        total_invested: nextTotalInvested,
+        current_value: nextCurrentValue,
+        total_pl: nextTotalPl,
+        percent_pl: nextPercentPl,
+        day_percent: nextDayPercent,
+      };
+    });
+
     setAddLoading(true);
     setAddError('');
     try {
-      await portfolioService.add(symbolValidated, Number(addQty), Number(addPrice));
+      // Send add holding request
+      await portfolioService.add(symbolValidated, quantity, price);
       resetAddForm();
       setShowAddForm(false);
-      await loadPortfolio();
+
+      // Immediately refetch portfolio
+      try {
+        const [summaryResult, holdingsResult, allocationResult] = await Promise.all([
+          portfolioService.summary(),
+          portfolioService.list(),
+          portfolioService.allocation(),
+        ]);
+        setSummary(summaryResult);
+        setHoldings(holdingsResult);
+        setAllocation(allocationResult);
+      } catch (error) {
+        console.warn('Failed to refresh portfolio:', error);
+      }
+
+      // Refetch again after 500ms for consistency
+      window.setTimeout(async () => {
+        try {
+          const [summaryResult, holdingsResult, allocationResult] = await Promise.all([
+            portfolioService.summary(),
+            portfolioService.list(),
+            portfolioService.allocation(),
+          ]);
+          setSummary(summaryResult);
+          setHoldings(holdingsResult);
+          setAllocation(allocationResult);
+        } catch (error) {
+          console.warn('Failed to verify portfolio after 500ms:', error);
+        }
+      }, 500);
     } catch (err) {
+      setHoldings(previousHoldings);
+      setSummary(previousSummary);
       setAddError(getErrorMessage(err));
+      console.error('Error adding holding:', err);
     } finally {
       setAddLoading(false);
     }
@@ -252,7 +359,6 @@ export default function PortfolioPage() {
         <SentinelShell
           title="Portfolio Overview"
           subtitle="Real-time valuation and performance metrics."
-          ribbon={ribbon}
           headerActions={
             <div className="flex gap-3">
               <button

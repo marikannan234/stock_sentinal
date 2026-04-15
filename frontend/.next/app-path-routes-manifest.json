@@ -1,0 +1,17 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/alerts/page": "/alerts",
+  "/news/page": "/news",
+  "/dashboard/page": "/dashboard",
+  "/profile/page": "/profile",
+  "/page": "/",
+  "/portfolio/page": "/portfolio",
+  "/settings/page": "/settings",
+  "/stocks/[symbol]/page": "/stocks/[symbol]",
+  "/trade-history/page": "/trade-history",
+  "/watchlist/page": "/watchlist",
+  "/support/page": "/support",
+  "/(auth)/login/page": "/login",
+  "/(auth)/register/page": "/register",
+  "/(auth)/premium/page": "/premium"
+}

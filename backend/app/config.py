@@ -1,7 +1,7 @@
 from functools import lru_cache
 import json
 from pydantic_settings import BaseSettings
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import AnyHttpUrl, field_validator, Field
 from typing import List, Optional
 
 
@@ -35,7 +35,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg2://stocksentinel:password@localhost:5432/stocksentinel"
 
     # Security / JWT
-    JWT_SECRET_KEY: str = "change-me"  # override in real env
+    # ✅ CRITICAL FIX: JWT_SECRET_KEY MUST be provided via environment variable
+    # No default value; will fail loudly if not set (protecting against accidental deployment with default)
+    JWT_SECRET_KEY: str = Field(..., min_length=32, description="Must be at least 32 characters; set via JWT_SECRET_KEY env var")
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
@@ -43,9 +45,11 @@ class Settings(BaseSettings):
     FINNHUB_API_KEY: str | None = None
 
     # Email Configuration
-    MAIL_USERNAME: str = "your-email@example.com"
-    MAIL_PASSWORD: str = "your-app-password"
-    MAIL_FROM: str = "your-email@example.com"
+    # ✅ CRITICAL FIX: Email credentials MUST be provided via environment variables
+    # No default values; will fail if not set (protecting against credential exposure)
+    MAIL_USERNAME: str = Field(..., description="SMTP email username; set via MAIL_USERNAME env var")
+    MAIL_PASSWORD: str = Field(..., description="SMTP email password; set via MAIL_PASSWORD env var")
+    MAIL_FROM: str = Field(..., description="Email from address; set via MAIL_FROM env var")
     MAIL_PORT: int = 587
     MAIL_SERVER: str = "smtp.gmail.com"
     MAIL_STARTTLS: bool = True

@@ -9,6 +9,15 @@ const CACHE_TIME_MS = 2000; // Keep cache for 2 seconds to handle rapid tab swit
 export const api = axios.create({
   baseURL: `${API_URL}/api`,
   withCredentials: false,
+  timeout: 10000,  // CRITICAL: 10 second timeout to prevent hung requests
+});
+
+// Ensure all requests have timeout protection
+api.interceptors.request.use((config) => {
+  if (!config.timeout) {
+    config.timeout = 10000;  // Default timeout for any request without explicit timeout
+  }
+  return config;
 });
 
 api.interceptors.request.use((config) => {
@@ -33,10 +42,17 @@ api.interceptors.response.use(
       url.includes("/indicators") ||
       url.includes("/news") ||
       url.includes("/stocks");
+    
+    // 🚨 PREVENT REDIRECT LOOP: Don't redirect to /login if already there
+    const isAlreadyOnLoginPage = 
+      typeof window !== "undefined" && 
+      (window.location.pathname.includes("/login") || window.location.pathname.includes("/register"));
+    
     if (
       typeof window !== "undefined" &&
       error?.response?.status === 401 &&
-      !skipRedirect
+      !skipRedirect &&
+      !isAlreadyOnLoginPage
     ) {
       window.localStorage.removeItem("stocksentinel_token");
       window.location.href = "/login";

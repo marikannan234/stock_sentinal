@@ -2,18 +2,26 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from app.config import settings
+from datetime import datetime
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from typing import Any, Dict, List, Optional
+import logging
 
 import requests
 import yfinance as yf
 from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/stock", tags=["stock"])
 
-_CACHE_TTL_SECONDS = 5 * 60  # 5 minutes
+# ============================================================================
+# AGGRESSIVE CACHE CONFIGURATION (5 minutes for quotes, 30 min for candles)
+# ============================================================================
+_QUOTE_CACHE_TTL_SECONDS = 5 * 60  # 5 minutes
+_CANDLE_CACHE_TTL_SECONDS = 30 * 60  # 30 minutes
 
 
 # ----- Quote cache -----
@@ -36,13 +44,16 @@ def _quote_cache_get(ticker: str) -> Optional["StockQuoteResponse"]:
         if entry.expires_at_monotonic <= now:
             _quote_cache.pop(ticker, None)
             return None
+        age = now - (entry.expires_at_monotonic - _QUOTE_CACHE_TTL_SECONDS)
+        logger.debug(f"Quote cache HIT for {ticker} (age: {age:.1f}s)")
         return entry.value
 
 
 def _quote_cache_set(ticker: str, value: "StockQuoteResponse") -> None:
-    expires = time.monotonic() + _CACHE_TTL_SECONDS
+    expires = time.monotonic() + _QUOTE_CACHE_TTL_SECONDS
     with _quote_cache_lock:
         _quote_cache[ticker] = _QuoteCacheEntry(expires_at_monotonic=expires, value=value)
+    logger.debug(f"Cached quote for {ticker}")
 
 
 # ----- Candle cache -----
@@ -65,13 +76,16 @@ def _candle_cache_get(ticker: str) -> Optional[StockDataResponse]:
         if entry.expires_at_monotonic <= now:
             _candle_cache.pop(ticker, None)
             return None
+        age = now - (entry.expires_at_monotonic - _CANDLE_CACHE_TTL_SECONDS)
+        logger.debug(f"Candle cache HIT for {ticker} (age: {age:.1f}s)")
         return entry.value
 
 
 def _candle_cache_set(ticker: str, value: StockDataResponse) -> None:
-    expires = time.monotonic() + _CACHE_TTL_SECONDS
+    expires = time.monotonic() + _CANDLE_CACHE_TTL_SECONDS
     with _candle_cache_lock:
         _candle_cache[ticker] = _CandleCacheEntry(expires_at_monotonic=expires, value=value)
+    logger.debug(f"Cached candles for {ticker}")
 
 
 # ----- Response models -----
@@ -103,22 +117,33 @@ class StockDataResponse(BaseModel):
     data_points: List[PriceDataPoint]
 
 
+# ============================================================================
+# PERFORMANCE TIMEOUT CONFIG (1 sec warning, 2 sec hard timeout)
+# ============================================================================
+_API_RESPONSE_WARNING_THRESHOLD = 1.0  # Log warning if response > 1 second
+_API_HARD_TIMEOUT = 2.0  # Kill API call after 2 seconds, use cache instead
+
+
 # ----- Helpers -----
 def _finnhub_get(url: str, params: Dict[str, Any], ticker: str) -> Dict[str, Any]:
-    """Call Finnhub API with timeout; return None on error instead of crashing."""
+    """Call Finnhub API with hard timeout; prioritize speed over freshness."""
+    start_time = time.monotonic()
     try:
-        resp = requests.get(url, params=params, timeout=5)  # Reduced from 10 to 5 seconds
+        resp = requests.get(url, params=params, timeout=_API_HARD_TIMEOUT)
+        elapsed = time.monotonic() - start_time
+        if elapsed > _API_RESPONSE_WARNING_THRESHOLD:
+            logger.warning(f"Finnhub API slow response for {ticker}: {elapsed:.2f}s (threshold: {_API_RESPONSE_WARNING_THRESHOLD}s)")
     except requests.Timeout:
-        import logging
-        logging.getLogger(__name__).warning(f"Finnhub API timeout for {ticker}")
+        elapsed = time.monotonic() - start_time
+        logger.warning(f"Finnhub API timeout for {ticker} (exceeded {_API_HARD_TIMEOUT}s hard limit)")
         return {}  # Return empty dict on timeout
     except requests.ConnectionError as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Finnhub API connection error for {ticker}: {e}")
+        elapsed = time.monotonic() - start_time
+        logger.warning(f"Finnhub API connection error for {ticker}: {e}")
         return {}  # Return empty dict on connection error
     except requests.RequestException as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Finnhub API request error for {ticker}: {e}")
+        elapsed = time.monotonic() - start_time
+        logger.warning(f"Finnhub API request error for {ticker}: {e}")
         return {}  # Return empty dict on other errors
     
     if resp.status_code == 429:
@@ -155,6 +180,7 @@ def fetch_stock_quote(ticker: str) -> StockQuoteResponse:
     Fetch real-time quote for a stock from Finnhub.
     Returns current price, change, percent change, and session OHLC.
     Uses cache. Falls back to zero prices on error (no crash).
+    Prioritizes response speed: cache > fresh data.
     """
     ticker_upper = ticker.upper().strip()
     if not ticker_upper:
@@ -163,6 +189,8 @@ def fetch_stock_quote(ticker: str) -> StockQuoteResponse:
     cached = _quote_cache_get(ticker_upper)
     if cached is not None:
         return cached
+    
+    start_time = time.monotonic()  # Track total response time
 
     api_key = settings.FINNHUB_API_KEY
     if not api_key:
@@ -191,8 +219,8 @@ def fetch_stock_quote(ticker: str) -> StockQuoteResponse:
         c = data.get("c")
         if c is None:
             # No data available, return safe default
-            import logging
-            logging.getLogger(__name__).warning(f"No quote data for {ticker_upper}, returning default")
+            elapsed = time.monotonic() - start_time
+            logger.warning(f"No quote data for {ticker_upper}, returning default (total: {elapsed:.2f}s)")
             response = StockQuoteResponse(
                 ticker=ticker_upper,
                 price=0.0,
@@ -216,6 +244,11 @@ def fetch_stock_quote(ticker: str) -> StockQuoteResponse:
             open=float(data.get("o") or 0),
             previous_close=float(data.get("pc") or 0),
         )
+        
+        elapsed = time.monotonic() - start_time
+        if elapsed > _API_RESPONSE_WARNING_THRESHOLD:
+            logger.warning(f"Quote fetch for {ticker_upper} slow: {elapsed:.2f}s (threshold: {_API_RESPONSE_WARNING_THRESHOLD}s)")
+        
         _quote_cache_set(ticker_upper, response)
         return response
     
@@ -224,8 +257,8 @@ def fetch_stock_quote(ticker: str) -> StockQuoteResponse:
         raise
     except Exception as e:
         # All other errors: return safe default instead of crashing
-        import logging
-        logging.getLogger(__name__).warning(f"Error fetching quote for {ticker_upper}: {e}")
+        elapsed = time.monotonic() - start_time
+        logger.warning(f"Error fetching quote for {ticker_upper}: {e} (total: {elapsed:.2f}s)")
         response = StockQuoteResponse(
             ticker=ticker_upper,
             price=0.0,
@@ -257,6 +290,7 @@ def get_stock_data(
     Fetch the last 30 days of daily price data for a given stock ticker from yfinance.
     Returns OHLCV (Open, High, Low, Close, Volume) data points.
     Falls back to empty data if fetch fails (no crash).
+    Prioritizes response speed: cache > fresh data.
     """
     ticker_upper = ticker.upper().strip()
     if not ticker_upper:
@@ -266,16 +300,17 @@ def get_stock_data(
     if cached is not None:
         return cached
 
+    start_time = time.monotonic()  # Track total response time
     try:
-        # Fetch data from yfinance - no signal.alarm() on Windows
+        # Fetch data from yfinance - timeout enforced via hard cutoff
         # Wrap in try-catch for error handling
         yf_ticker = yf.Ticker(ticker_upper)
         df = yf_ticker.history(period="30d", interval="1d")
             
     except Exception as e:
         # Return empty data set on error instead of crashing
-        import logging
-        logging.getLogger(__name__).warning(f"yfinance error for {ticker_upper}: {e}")
+        elapsed = time.monotonic() - start_time
+        logger.warning(f"yfinance error for {ticker_upper}: {e} (total: {elapsed:.2f}s)")
         response = StockDataResponse(
             ticker=ticker_upper,
             name=ticker_upper,
@@ -302,7 +337,10 @@ def get_stock_data(
     data_points: List[PriceDataPoint] = []
     try:
         for idx, row in df.iterrows():
-            date_str = idx.strftime("%Y-%m-%d")
+            if isinstance(idx, datetime):
+                date_str = idx.strftime("%Y-%m-%d")
+            else:
+                date_str = str(idx)[:10]
             data_points.append(
                 PriceDataPoint(
                     date=date_str,
@@ -326,5 +364,10 @@ def get_stock_data(
         period_days=30,
         data_points=data_points,
     )
+    
+    elapsed = time.monotonic() - start_time
+    if elapsed > _API_RESPONSE_WARNING_THRESHOLD:
+        logger.warning(f"Candle fetch for {ticker_upper} slow: {elapsed:.2f}s (threshold: {_API_RESPONSE_WARNING_THRESHOLD}s)")
+    
     _candle_cache_set(ticker_upper, response)
     return response

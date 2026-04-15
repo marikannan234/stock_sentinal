@@ -1,0 +1,15 @@
+{
+  "frontend_tests": {},
+  "workflow_tests": {},
+  "ui_issues": [
+    "News endpoint returns empty list"
+  ],
+  "performance_issues": [
+    "Live market data is SLOW: 5809ms (>1s)",
+    "CORS headers may be missing (could cause frontend issues)"
+  ],
+  "summary": {
+    "success": 16,
+    "issues": 1
+  }
+}

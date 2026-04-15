@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # ============================================
 # Cache Configuration
 # ============================================
-NEWS_CACHE_TTL_SECONDS = 5 * 60  # 5 minutes
+NEWS_CACHE_TTL_SECONDS = 60  # 60 seconds cache
 GLOBAL_NEWS_CACHE_KEY = "global_news"
 
 

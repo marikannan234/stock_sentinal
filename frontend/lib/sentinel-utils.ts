@@ -6,6 +6,10 @@ export function cn(...parts: Array<string | false | null | undefined>) {
 
 export function formatCurrency(value?: number | null, compact = false) {
   const safeValue = Number(value ?? 0);
+  // Handle NaN and Infinity cases (Issue #18)
+  if (isNaN(safeValue) || !isFinite(safeValue)) {
+    return '-';
+  }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -17,6 +21,10 @@ export function formatCurrency(value?: number | null, compact = false) {
 
 export function formatPercent(value?: number | null) {
   const safeValue = Number(value ?? 0);
+  // Handle NaN and Infinity cases (Issue #18)
+  if (isNaN(safeValue) || !isFinite(safeValue)) {
+    return '-';
+  }
   const prefix = safeValue > 0 ? '+' : '';
   return `${prefix}${safeValue.toFixed(2)}%`;
 }

@@ -1,0 +1,191 @@
+{
+  "test_summary": {
+    "total": 22,
+    "passed": 22,
+    "failed": 1,
+    "warnings": 6
+  },
+  "apis": {
+    "Health: Status Check": {
+      "status": 200,
+      "ms": 39.50905799865723
+    },
+    "API: OpenAPI Docs": {
+      "status": 200,
+      "ms": 11.285066604614258
+    },
+    "Auth: Register (invalid email)": {
+      "status": 422,
+      "ms": 16.31903648376465
+    },
+    "Auth: Login (empty)": {
+      "status": 422,
+      "ms": 15.965461730957031
+    },
+    "Search: AAPL": {
+      "status": 200,
+      "ms": 1010.4978084564209
+    },
+    "Search: Empty Query": {
+      "status": 422,
+      "ms": 13.574600219726562
+    },
+    "Stock: Quote (AAPL)": {
+      "status": 200,
+      "ms": 27.470827102661133
+    },
+    "Stock: Quote (Invalid Symbol)": {
+      "status": 422,
+      "ms": 17.104148864746094
+    },
+    "Stock: Candles (AAPL)": {
+      "status": 200,
+      "ms": 2073.4188556671143
+    },
+    "News: Get All": {
+      "status": 200,
+      "ms": 539.1347408294678
+    },
+    "News: With Limit": {
+      "status": 200,
+      "ms": 21.816253662109375
+    },
+    "News: Negative Limit": {
+      "status": 422,
+      "ms": 42.45328903198242
+    },
+    "News: Empty Search": {
+      "status": 200,
+      "ms": 737.0848655700684
+    },
+    "Stocks: Live Ribbon": {
+      "status": 200,
+      "ms": 9345.752000808716
+    },
+    "Stocks: Live Quotes": {
+      "status": 200,
+      "ms": 16.69621467590332
+    },
+    "Stocks: AAPL Price": {
+      "status": 200,
+      "ms": 1263.469934463501
+    },
+    "Stocks: AAPL Details": {
+      "status": 200,
+      "ms": 1088.2418155670166
+    },
+    "Stocks: Market Summary": {
+      "status": 200,
+      "ms": 5118.236303329468
+    },
+    "Watchlist: Get (no auth)": {
+      "status": 401,
+      "ms": 18.325090408325195
+    },
+    "Portfolio: Get (no auth)": {
+      "status": 401,
+      "ms": 17.13848114013672
+    },
+    "Alerts: Get (no auth)": {
+      "status": 401,
+      "ms": 14.227867126464844
+    },
+    "Dashboard: Data (no auth)": {
+      "status": 401,
+      "ms": 22.91703224182129
+    }
+  },
+  "failures": [
+    "Stock: Quote (Invalid Symbol): 422"
+  ],
+  "performance": {
+    "Health: Status Check": {
+      "ms": 39.50905799865723,
+      "status": 200
+    },
+    "API: OpenAPI Docs": {
+      "ms": 11.285066604614258,
+      "status": 200
+    },
+    "Auth: Register (invalid email)": {
+      "ms": 16.31903648376465,
+      "status": 422
+    },
+    "Auth: Login (empty)": {
+      "ms": 15.965461730957031,
+      "status": 422
+    },
+    "Search: AAPL": {
+      "ms": 1010.4978084564209,
+      "status": 200
+    },
+    "Search: Empty Query": {
+      "ms": 13.574600219726562,
+      "status": 422
+    },
+    "Stock: Quote (AAPL)": {
+      "ms": 27.470827102661133,
+      "status": 200
+    },
+    "Stock: Quote (Invalid Symbol)": {
+      "ms": 17.104148864746094,
+      "status": 422
+    },
+    "Stock: Candles (AAPL)": {
+      "ms": 2073.4188556671143,
+      "status": 200
+    },
+    "News: Get All": {
+      "ms": 539.1347408294678,
+      "status": 200
+    },
+    "News: With Limit": {
+      "ms": 21.816253662109375,
+      "status": 200
+    },
+    "News: Negative Limit": {
+      "ms": 42.45328903198242,
+      "status": 422
+    },
+    "News: Empty Search": {
+      "ms": 737.0848655700684,
+      "status": 200
+    },
+    "Stocks: Live Ribbon": {
+      "ms": 9345.752000808716,
+      "status": 200
+    },
+    "Stocks: Live Quotes": {
+      "ms": 16.69621467590332,
+      "status": 200
+    },
+    "Stocks: AAPL Price": {
+      "ms": 1263.469934463501,
+      "status": 200
+    },
+    "Stocks: AAPL Details": {
+      "ms": 1088.2418155670166,
+      "status": 200
+    },
+    "Stocks: Market Summary": {
+      "ms": 5118.236303329468,
+      "status": 200
+    },
+    "Watchlist: Get (no auth)": {
+      "ms": 18.325090408325195,
+      "status": 401
+    },
+    "Portfolio: Get (no auth)": {
+      "ms": 17.13848114013672,
+      "status": 401
+    },
+    "Alerts: Get (no auth)": {
+      "ms": 14.227867126464844,
+      "status": 401
+    },
+    "Dashboard: Data (no auth)": {
+      "ms": 22.91703224182129,
+      "status": 401
+    }
+  }
+}

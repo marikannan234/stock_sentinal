@@ -2,6 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/**
+ * @deprecated DEPRECATED: WebSocket usage removed in favor of polling
+ * 
+ * ⚠️ This hook is no longer used. Use polling-based API calls instead:
+ * 
+ * useEffect(() => {
+ *   const interval = setInterval(() => { 
+ *     fetchData(); 
+ *   }, 5000);
+ *   return () => clearInterval(interval);
+ * }, []);
+ * 
+ * WebSocket improvements needed:
+ * - Unstable connections cause lag
+ * - Multiple connection attempts create UI flicker  
+ * - Polling is simpler and more reliable for stock data
+ * - Frontend performance: 100ms polling >> unstable WebSocket
+ */
+
 export interface PortfolioPriceUpdate {
   symbol: string;
   price: number;

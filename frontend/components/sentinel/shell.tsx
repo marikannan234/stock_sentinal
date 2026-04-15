@@ -7,6 +7,7 @@ import { Tooltip } from 'react-tooltip';
 import type { AlertItem, LiveQuote, SymbolSearchItem } from '@/lib/types';
 import { cn, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 import { Icon } from './primitives';
+import { OptimizedRibbon } from './optimized-ribbon';
 import { alertService, marketService, portfolioService, getErrorMessage } from '@/lib/api-service';
 import { api } from '@/lib/api-client';
 
@@ -328,7 +329,7 @@ export function SentinelShell({
   children: ReactNode;
   title?: string;
   subtitle?: string;
-  ribbon?: LiveQuote[];
+  ribbon?: LiveQuote[]; // @deprecated Use global store instead
   headerActions?: ReactNode;
   sidebarFooter?: ReactNode;
 }) {
@@ -360,25 +361,8 @@ export function SentinelShell({
         </Link>
 
         {/* Live Ribbon — grows to fill available space, fades at edges */}
-        {ribbon && ribbon.length > 0 && (
-          <div className="ticker-wrap hidden flex-1 border-l border-white/10 pl-4 lg:block min-w-0">
-            <div className="ticker-track gap-8 text-[10px] uppercase tracking-[0.2em] text-[var(--on-surface-variant)]">
-              {/* Two copies for seamless infinite loop (-50% translate) */}
-              {[...ribbon, ...ribbon].map((quote, index) => (
-                <Link
-                  key={`${quote.symbol}-${index}`}
-                  href={`/stocks/${quote.symbol}`}
-                  className="flex items-center gap-1.5 whitespace-nowrap font-mono hover:opacity-80 transition-opacity"
-                >
-                  <span className="font-bold text-white">{quote.symbol}</span>
-                  <span className={quote.change_percent >= 0 ? 'text-secondary' : 'text-tertiary'}>
-                    {formatCurrency(quote.price)} {formatPercent(quote.change_percent)}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Now uses OptimizedRibbon component (gets data from global store) */}
+        <OptimizedRibbon />
 
         {/* Right-side actions — always at end */}
         <div className="ml-auto flex shrink-0 items-center gap-3">

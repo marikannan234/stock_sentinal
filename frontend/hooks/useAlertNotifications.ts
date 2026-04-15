@@ -50,7 +50,17 @@ export const useAlertNotifications = () => {
       console.log('Connecting to WebSocket:', wsUrl);
       const ws = new WebSocket(wsUrl);
 
+      // CRITICAL: Add connection timeout (Issue #8)
+      // If connection doesn't open within 10s, close and retry
+      const connectionTimeoutRef = (typeof global !== 'undefined' ? global : window).setTimeout(() => {
+        if (ws.readyState === WebSocket.CONNECTING) {
+          console.warn('WebSocket connection timeout, closing...');
+          ws.close();
+        }
+      }, 10000);
+
       ws.onopen = () => {
+        clearTimeout(connectionTimeoutRef);
         console.log('Connected to alert notifications');
         isConnectingRef.current = false;
         setIsConnected(true);
@@ -109,6 +119,12 @@ export const useAlertNotifications = () => {
         console.error('WebSocket error:', error);
         isConnectingRef.current = false;
         setIsConnected(false);
+
+        // Clear heartbeat on error to prevent orphaned interval
+        if (heartbeatIntervalRef.current) {
+          clearInterval(heartbeatIntervalRef.current);
+          heartbeatIntervalRef.current = undefined;
+        }
 
         toast.error('Connection error with alert service', {
           duration: 3000,

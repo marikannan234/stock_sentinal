@@ -2,18 +2,30 @@
 
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth';
 
 export function LoginForm() {
   const router = useRouter();
+  const pathname = usePathname();
   const { login, token, loading, error, clearError } = useAuthStore();
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (token) router.replace('/dashboard');
-  }, [token, router]);
+    setMounted(true);
+  }, []);
+
+  // 🚨 Only redirect if: (1) component mounted, (2) user has token, (3) NOT on auth pages
+  useEffect(() => {
+    if (!mounted) return;
+    if (!token) return;
+    if (pathname.includes('/login') || pathname.includes('/register')) return;
+    
+    // Safe to redirect to dashboard
+    router.replace('/dashboard');
+  }, [mounted, token, pathname, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

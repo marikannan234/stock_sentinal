@@ -1,18 +1,19 @@
 'use client';
 
 import { ReactNode, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth';
 
 export function ProtectedScreen({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { token, isHydrated, loading } = useAuthStore();
 
   useEffect(() => {
-    if (isHydrated && !loading && !token) {
+    if (isHydrated && !loading && !token && !pathname.includes('/login') && !pathname.includes('/register')) {
       router.replace('/login');
     }
-  }, [isHydrated, loading, token, router]);
+  }, [isHydrated, loading, token, pathname, router]);
 
   if (!isHydrated || loading) {
     return (

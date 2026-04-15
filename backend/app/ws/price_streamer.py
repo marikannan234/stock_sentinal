@@ -130,6 +130,20 @@ class PriceStreamer:
                 # Stop streaming if too many consecutive errors
                 if consecutive_errors >= max_consecutive_errors:
                     logger.error(f"Stopping stream for {symbol} after {consecutive_errors} consecutive errors")
+                    
+                    # CRITICAL: Notify clients of stream failure
+                    try:
+                        error_notification = {
+                            "type": "stream_error",
+                            "symbol": symbol,
+                            "message": f"Failed to fetch prices for {symbol} after {consecutive_errors} attempts",
+                            "timestamp": datetime.utcnow().isoformat() + "Z",
+                            "consecutive_errors": consecutive_errors,
+                        }
+                        await callback(symbol, error_notification)
+                    except Exception as e:
+                        logger.error(f"Failed to notify client of stream error for {symbol}: {e}")
+                    
                     break
             
             except asyncio.CancelledError:

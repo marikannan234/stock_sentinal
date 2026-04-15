@@ -84,8 +84,21 @@ async def lifespan(app: FastAPI):
     try:
         start_scheduler()
     except Exception as e:
-        logger.error(f"Failed to start background scheduler: {e}")
-        # Don't fail app startup if scheduler fails, just log the error
+        logger.error(
+            f"Failed to start background scheduler: {e}",
+            exc_info=True
+        )
+        # CRITICAL: In production, fail loudly - alerts are essential
+        if settings.ENVIRONMENT == "production":
+            raise RuntimeError(
+                "Scheduler initialization required for production. "
+                "Alerts cannot run without the background scheduler."
+            ) from e
+        # In dev/staging, allow startup but warn
+        logger.warning(
+            "Continuing startup without scheduler - alerts disabled! "
+            "This is only acceptable in development environment."
+        )
     
     logger.info(f"{settings.APP_NAME} started successfully")
     

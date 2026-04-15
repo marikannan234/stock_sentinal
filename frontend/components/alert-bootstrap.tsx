@@ -3,14 +3,19 @@
 /**
  * Alert notification bootstrap component.
  * Initializes alert WebSocket behavior only after the app mounts in the browser.
+ * 
+ * IMPORTANT: This is the ONLY place WebSocket connections should be initialized.
+ * All alert notifications are handled through the singleton WebSocket manager.
  */
 
 import { useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
-import { useAlertNotifications } from '@/hooks/useAlertNotifications';
+import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { useAlertsWS } from '@/hooks/useAlertsWS';
 
 function AlertRuntime() {
-  useAlertNotifications();
+  // Initialize WebSocket subscription (runs only once on mount)
+  useAlertsWS();
 
   return (
     <Toaster
@@ -32,7 +37,7 @@ function AlertRuntime() {
             background: '#10b981',
             color: '#fff',
           },
-          icon: '!',
+          icon: <CheckCircle size={20} className="text-white" />,
         },
         error: {
           duration: 4000,
@@ -40,14 +45,14 @@ function AlertRuntime() {
             background: '#ef4444',
             color: '#fff',
           },
-          icon: 'x',
+          icon: <XCircle size={20} className="text-white" />,
         },
         loading: {
           style: {
             background: '#3b82f6',
             color: '#fff',
           },
-          icon: '...',
+          icon: <Loader2 size={20} className="text-white animate-spin" />,
         },
       }}
     />

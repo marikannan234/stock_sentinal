@@ -729,7 +729,19 @@ def trigger_alert(
         True if alert was triggered successfully, False if already triggered
     """
     try:
-        from app.models.alert import AlertHistory
+        from app.models.alert import AlertHistory, AlertType
+        
+        # CRITICAL: Validate alert_type is not None (prevents crash on corrupt data)
+        if not alert.alert_type:
+            logger.error(
+                f"Alert has no alert_type (null), cannot trigger",
+                extra={
+                    "alert_id": alert.id,
+                    "user_id": alert.user_id,
+                    "symbol": alert.stock_symbol,
+                },
+            )
+            return False
         
         # Prevent duplicate triggers - check if already triggered recently (cooldown check)
         if not alert.is_active:

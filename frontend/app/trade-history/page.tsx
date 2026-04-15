@@ -6,6 +6,7 @@ import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard } from '@/components/sentinel/primitives';
 import { ErrorBoundary } from '@/components/sentinel/error-boundary';
 import { marketService, tradeService } from '@/lib/api-service';
+import { useMarketStore } from '@/lib/store-v2';
 import type { LiveQuote, TradeHistoryItem, TradeHistorySummary } from '@/lib/types';
 import { formatCurrency, formatPercent, exportToCSV } from '@/lib/sentinel-utils';
 
@@ -15,7 +16,9 @@ type SortType = 'latest' | 'oldest' | 'highest-profit';
 export default function TradeHistoryPage() {
   const [summary, setSummary] = useState<TradeHistorySummary | null>(null);
   const [history, setHistory] = useState<TradeHistoryItem[]>([]);
-  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
+  
+  // Use global store for ribbon (no polling needed - DataSyncProvider handles it)
+  const ribbon = useMarketStore((state) => state.ribbon);
   
   // UI States
   const [loadingSummary, setLoadingSummary] = useState(true);
@@ -28,7 +31,6 @@ export default function TradeHistoryPage() {
     setLoadingSummary(true);
     Promise.all([
       tradeService.historySummary().then(setSummary).catch(() => setSummary(null)),
-      marketService.getLiveRibbon().then((res) => setRibbon(res.stocks.slice(0, 8))).catch(() => setRibbon([])),
     ]).finally(() => setLoadingSummary(false));
   }, []);
 
@@ -76,9 +78,21 @@ export default function TradeHistoryPage() {
     const sorted = [...filteredTrades];
 
     if (sortBy === 'latest') {
-      return sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      return sorted.sort((a, b) => {
+        const timeA = new Date(a.created_at || '').getTime();
+        const timeB = new Date(b.created_at || '').getTime();
+        // Safe sort: if dates are invalid, keep original order (Issue #5)
+        if (isNaN(timeA) || isNaN(timeB)) return 0;
+        return timeB - timeA;
+      });
     } else if (sortBy === 'oldest') {
-      return sorted.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      return sorted.sort((a, b) => {
+        const timeA = new Date(a.created_at || '').getTime();
+        const timeB = new Date(b.created_at || '').getTime();
+        // Safe sort: if dates are invalid, keep original order (Issue #5)
+        if (isNaN(timeA) || isNaN(timeB)) return 0;
+        return timeA - timeB;
+      });
     } else if (sortBy === 'highest-profit') {
       return sorted.sort((a, b) => (b.profit_loss ?? 0) - (a.profit_loss ?? 0));
     }

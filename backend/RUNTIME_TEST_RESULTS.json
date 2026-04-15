@@ -1,0 +1,346 @@
+{
+  "timestamp": "2026-04-14T00:02:20.913337",
+  "summary": {
+    "total_tests": 23,
+    "passed": 5,
+    "failed": 18,
+    "pass_rate": 21.73913043478261,
+    "score": 0
+  },
+  "results": {
+    "apis_tested": [
+      "Auth: Register User",
+      "Auth: Login",
+      "Stock: Get AAPL Data",
+      "Stock: Search Stocks",
+      "Stock: Market Overview",
+      "Stock: Trending Stocks",
+      "Stock: Market Indices",
+      "Portfolio: Get Portfolio",
+      "Portfolio: Get Statistics",
+      "Portfolio: Get Allocation",
+      "News: Market News",
+      "News: AAPL News",
+      "News: Market Sentiment",
+      "Alerts: Get All Alerts",
+      "Alerts: Get Active Alerts",
+      "Alerts: Get Alert Types",
+      "Watchlist: Get Watchlist",
+      "Watchlist: Get Items",
+      "Error: Invalid Stock Ticker",
+      "Error: Missing Required Param",
+      "Error: Wrong HTTP Method",
+      "Data: Market Overview Structure",
+      "Data: Trending Stocks (Null Check)"
+    ],
+    "passed": [
+      {
+        "test": "Stock: Get AAPL Data",
+        "endpoint": "/api/stocks/AAPL",
+        "response_time_ms": 6443.755388259888
+      },
+      {
+        "test": "News: Market News",
+        "endpoint": "/api/news/market",
+        "response_time_ms": 929.3723106384277
+      },
+      {
+        "test": "News: AAPL News",
+        "endpoint": "/api/news/AAPL",
+        "response_time_ms": 928.0338287353516
+      },
+      {
+        "test": "News: Market Sentiment",
+        "endpoint": "/api/news/sentiment",
+        "response_time_ms": 1080.7483196258545
+      },
+      {
+        "test": "Error: Wrong HTTP Method",
+        "endpoint": "/api/stocks/AAPL",
+        "response_time_ms": 11.592626571655273
+      }
+    ],
+    "failed": [
+      {
+        "test": "Auth: Register User",
+        "endpoint": "/api/auth/register",
+        "expected": 200,
+        "actual": 500,
+        "response": "Traceback (most recent call last):\n  File \"C:\\Users\\acer\\Downloads\\stock sentinal\\backend\\.venv\\Lib\\site-packages\\sqlalchemy\\engine\\base.py\", line 143, in __init__\n    self._dbapi_connection = engine."
+      },
+      {
+        "test": "Auth: Login",
+        "endpoint": "/api/auth/login",
+        "expected": 200,
+        "actual": 422,
+        "response": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"username\"],\"msg\":\"Field required\",\"input\":null},{\"type\":\"missing\",\"loc\":[\"body\",\"password\"],\"msg\":\"Field required\",\"input\":null}]}"
+      },
+      {
+        "test": "Stock: Search Stocks",
+        "endpoint": "/api/stocks/search?query=Apple",
+        "expected": 200,
+        "actual": 502,
+        "response": "{\"detail\":\"Failed to fetch price for SEARCH from both Finnhub and yfinance\"}"
+      },
+      {
+        "test": "Stock: Market Overview",
+        "endpoint": "/api/dashboard/market-overview",
+        "expected": 200,
+        "actual": 404,
+        "response": "{\"detail\":\"Not Found\"}"
+      },
+      {
+        "test": "Stock: Trending Stocks",
+        "endpoint": "/api/dashboard/trending",
+        "expected": 200,
+        "actual": 404,
+        "response": "{\"detail\":\"Not Found\"}"
+      },
+      {
+        "test": "Stock: Market Indices",
+        "endpoint": "/api/stocks/indices",
+        "expected": 200,
+        "actual": 502,
+        "response": "{\"detail\":\"Failed to fetch price for INDICES from both Finnhub and yfinance\"}"
+      },
+      {
+        "test": "Portfolio: Get Portfolio",
+        "endpoint": "/api/portfolio",
+        "expected": 200,
+        "actual": 401,
+        "response": "{\"detail\":\"Not authenticated\"}"
+      },
+      {
+        "test": "Portfolio: Get Statistics",
+        "endpoint": "/api/portfolio/stats",
+        "expected": 200,
+        "actual": 405,
+        "response": "{\"detail\":\"Method Not Allowed\"}"
+      },
+      {
+        "test": "Portfolio: Get Allocation",
+        "endpoint": "/api/portfolio/allocation",
+        "expected": 200,
+        "actual": 401,
+        "response": "{\"detail\":\"Not authenticated\"}"
+      },
+      {
+        "test": "Alerts: Get All Alerts",
+        "endpoint": "/api/alerts",
+        "expected": 200,
+        "actual": 401,
+        "response": "{\"detail\":\"Not authenticated\"}"
+      },
+      {
+        "test": "Alerts: Get Active Alerts",
+        "endpoint": "/api/alerts/active",
+        "expected": 200,
+        "actual": 401,
+        "response": "{\"detail\":\"Not authenticated\"}"
+      },
+      {
+        "test": "Alerts: Get Alert Types",
+        "endpoint": "/api/alerts/types",
+        "expected": 200,
+        "actual": 401,
+        "response": "{\"detail\":\"Not authenticated\"}"
+      },
+      {
+        "test": "Watchlist: Get Watchlist",
+        "endpoint": "/api/watchlist",
+        "expected": 200,
+        "actual": 401,
+        "response": "{\"detail\":\"Not authenticated\"}"
+      },
+      {
+        "test": "Watchlist: Get Items",
+        "endpoint": "/api/watchlist/items",
+        "expected": 200,
+        "actual": 405,
+        "response": "{\"detail\":\"Method Not Allowed\"}"
+      },
+      {
+        "test": "Error: Invalid Stock Ticker",
+        "endpoint": "/api/stocks/INVALID_TICKER_XXXXX",
+        "expected": 404,
+        "actual": 502,
+        "response": "{\"detail\":\"Failed to fetch price for INVALID_TICKER_XXXXX from both Finnhub and yfinance\"}"
+      },
+      {
+        "test": "Error: Missing Required Param",
+        "endpoint": "/api/stocks",
+        "expected": 422,
+        "actual": 404,
+        "response": "{\"detail\":\"Not Found\"}"
+      },
+      {
+        "test": "Data: Market Overview Structure",
+        "endpoint": "/api/dashboard/market-overview",
+        "expected": 200,
+        "actual": 404,
+        "response": "{\"detail\":\"Not Found\"}"
+      },
+      {
+        "test": "Data: Trending Stocks (Null Check)",
+        "endpoint": "/api/dashboard/trending",
+        "expected": 200,
+        "actual": 404,
+        "response": "{\"detail\":\"Not Found\"}"
+      }
+    ],
+    "warnings": [
+      {
+        "test": "Stock: Get AAPL Data",
+        "issue": "Slow response: 6444ms"
+      },
+      {
+        "test": "News: Market Sentiment",
+        "issue": "Slow response: 1081ms"
+      }
+    ],
+    "performance_metrics": {
+      "Auth: Register User": {
+        "endpoint": "/api/auth/register",
+        "method": "POST",
+        "response_time_ms": 4122.367858886719,
+        "status_code": 500
+      },
+      "Auth: Login": {
+        "endpoint": "/api/auth/login",
+        "method": "POST",
+        "response_time_ms": 9.569406509399414,
+        "status_code": 422
+      },
+      "Stock: Get AAPL Data": {
+        "endpoint": "/api/stocks/AAPL",
+        "method": "GET",
+        "response_time_ms": 6443.755388259888,
+        "status_code": 200
+      },
+      "Stock: Search Stocks": {
+        "endpoint": "/api/stocks/search?query=Apple",
+        "method": "GET",
+        "response_time_ms": 4426.949977874756,
+        "status_code": 502
+      },
+      "Stock: Market Overview": {
+        "endpoint": "/api/dashboard/market-overview",
+        "method": "GET",
+        "response_time_ms": 5.663871765136719,
+        "status_code": 404
+      },
+      "Stock: Trending Stocks": {
+        "endpoint": "/api/dashboard/trending",
+        "method": "GET",
+        "response_time_ms": 5.872249603271484,
+        "status_code": 404
+      },
+      "Stock: Market Indices": {
+        "endpoint": "/api/stocks/indices",
+        "method": "GET",
+        "response_time_ms": 5006.89172744751,
+        "status_code": 502
+      },
+      "Portfolio: Get Portfolio": {
+        "endpoint": "/api/portfolio",
+        "method": "GET",
+        "response_time_ms": 8.841276168823242,
+        "status_code": 401
+      },
+      "Portfolio: Get Statistics": {
+        "endpoint": "/api/portfolio/stats",
+        "method": "GET",
+        "response_time_ms": 80.54685592651367,
+        "status_code": 405
+      },
+      "Portfolio: Get Allocation": {
+        "endpoint": "/api/portfolio/allocation",
+        "method": "GET",
+        "response_time_ms": 33.01692008972168,
+        "status_code": 401
+      },
+      "News: Market News": {
+        "endpoint": "/api/news/market",
+        "method": "GET",
+        "response_time_ms": 929.3723106384277,
+        "status_code": 200
+      },
+      "News: AAPL News": {
+        "endpoint": "/api/news/AAPL",
+        "method": "GET",
+        "response_time_ms": 928.0338287353516,
+        "status_code": 200
+      },
+      "News: Market Sentiment": {
+        "endpoint": "/api/news/sentiment",
+        "method": "GET",
+        "response_time_ms": 1080.7483196258545,
+        "status_code": 200
+      },
+      "Alerts: Get All Alerts": {
+        "endpoint": "/api/alerts",
+        "method": "GET",
+        "response_time_ms": 21.96049690246582,
+        "status_code": 401
+      },
+      "Alerts: Get Active Alerts": {
+        "endpoint": "/api/alerts/active",
+        "method": "GET",
+        "response_time_ms": 26.1080265045166,
+        "status_code": 401
+      },
+      "Alerts: Get Alert Types": {
+        "endpoint": "/api/alerts/types",
+        "method": "GET",
+        "response_time_ms": 6.926298141479492,
+        "status_code": 401
+      },
+      "Watchlist: Get Watchlist": {
+        "endpoint": "/api/watchlist",
+        "method": "GET",
+        "response_time_ms": 6.722211837768555,
+        "status_code": 401
+      },
+      "Watchlist: Get Items": {
+        "endpoint": "/api/watchlist/items",
+        "method": "GET",
+        "response_time_ms": 5.101203918457031,
+        "status_code": 405
+      },
+      "Error: Invalid Stock Ticker": {
+        "endpoint": "/api/stocks/INVALID_TICKER_XXXXX",
+        "method": "GET",
+        "response_time_ms": 4127.787828445435,
+        "status_code": 502
+      },
+      "Error: Missing Required Param": {
+        "endpoint": "/api/stocks",
+        "method": "GET",
+        "response_time_ms": 13.37122917175293,
+        "status_code": 404
+      },
+      "Error: Wrong HTTP Method": {
+        "endpoint": "/api/stocks/AAPL",
+        "method": "POST",
+        "response_time_ms": 11.592626571655273,
+        "status_code": 405
+      },
+      "concurrent_avg": 1860.479211807251,
+      "Data: Market Overview Structure": {
+        "endpoint": "/api/dashboard/market-overview",
+        "method": "GET",
+        "response_time_ms": 20.652294158935547,
+        "status_code": 404
+      },
+      "Data: Trending Stocks (Null Check)": {
+        "endpoint": "/api/dashboard/trending",
+        "method": "GET",
+        "response_time_ms": 6.414890289306641,
+        "status_code": 404
+      }
+    },
+    "total_tests": 23,
+    "total_passed": 5,
+    "total_failed": 18
+  }
+}
