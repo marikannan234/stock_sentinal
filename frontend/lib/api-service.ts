@@ -33,7 +33,19 @@ export function getErrorMessage(error: unknown, fallback = 'Something went wrong
   const axiosError = error as {
     response?: { data?: { detail?: unknown; message?: string } };
     message?: string;
+    code?: string;
   };
+
+  // Axios network errors do not have a response object (backend down, CORS blocked, DNS issues).
+  if (!axiosError?.response) {
+    if (axiosError?.code === 'ECONNABORTED') {
+      return 'Request timed out. Verify backend API is running and reachable.';
+    }
+    if (axiosError?.message?.toLowerCase().includes('network')) {
+      return 'Network error: cannot reach API. Check backend status, API URL, and CORS settings.';
+    }
+  }
+
   const detail = axiosError?.response?.data?.detail;
   if (Array.isArray(detail)) {
     return detail
