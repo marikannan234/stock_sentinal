@@ -15,13 +15,8 @@ from app.schemas.user import (
     UserRead,
     UserUpdate,
     PasswordChange,
-    ForgotPasswordRequest,
-    ForgotPasswordVerify,
 )
 from app.config import settings
-
-# In-memory mock OTP store (dev only). Key: email, Value: otp
-_otp_store: dict[str, str] = {}
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -170,31 +165,37 @@ def change_password(
     return {"detail": "Password updated"}
 
 
-@router.post("/forgot-password")
-def forgot_password_request(body: ForgotPasswordRequest) -> dict:
-    """Request OTP for password reset. Mocked: always returns success, OTP is 123456."""
-    otp = "123456"
-    _otp_store[body.email.lower()] = otp
-    return {"detail": "If an account exists, you will receive an OTP shortly."}
+# ---------------------------------------------------------------------------
+# Password reset: DISABLED
+#
+# The previous implementation accepted a hardcoded OTP that was never
+# delivered to the user, which allowed anyone to reset any account's
+# password. Both endpoints now refuse every request without reading input
+# or touching the database.
+#
+# TODO(security): before re-enabling, implement:
+#   - a random 6-digit code generated with `secrets` (not `random`)
+#   - store only a hash of the code (never the plaintext), in the database
+#     so it works across workers/replicas
+#   - 10-minute expiry, single use, invalidated on success
+#   - a cap on verification attempts per code (e.g. 5), then invalidate
+#   - rate limiting on both endpoints, per IP and per email
+#   - delivery by email; the request endpoint must return the same response
+#     whether or not the account exists (no account enumeration)
+#   - invalidate existing sessions/tokens after a successful reset
+# ---------------------------------------------------------------------------
+
+_PASSWORD_RESET_DISABLED = "Password reset is temporarily unavailable. Please contact support."
 
 
-@router.post("/forgot-password/verify")
-def forgot_password_verify(
-    body: ForgotPasswordVerify,
-    db: Session = Depends(get_db_session),
-) -> dict:
-    """Verify OTP and set new password. Mocked: OTP 123456 always works."""
-    stored_otp = _otp_store.get(body.email.lower())
-    if not stored_otp or stored_otp != body.otp:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired OTP",
-        )
-    user = db.query(User).filter(User.email == body.email).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
-    user.password_hash = get_password_hash(body.new_password)
-    db.commit()
-    del _otp_store[body.email.lower()]
-    return {"detail": "Password updated. Please log in."}
+@router.post("/forgot-password", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+def forgot_password_request() -> dict:
+    """Disabled until a secure reset flow exists (see TODO above)."""
+    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=_PASSWORD_RESET_DISABLED)
+
+
+@router.post("/forgot-password/verify", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+def forgot_password_verify() -> dict:
+    """Disabled until a secure reset flow exists (see TODO above)."""
+    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=_PASSWORD_RESET_DISABLED)
 

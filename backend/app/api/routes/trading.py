@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/trade", tags=["trading"])
 
+# Quantities are stored as floats; treat anything smaller than this as zero so
+# e.g. buying 0.1 + 0.2 and selling 0.3 fully closes the position.
+_QUANTITY_EPSILON = 1e-9
+
 
 def _parse_trade_status(status_value: str) -> TradeStatus:
     """Convert a raw status string into the model enum with a clean client error."""
@@ -48,8 +52,9 @@ def _update_portfolio_from_trade(
 ) -> None:
     """Update user's portfolio based on trade."""
 
-    # Coerce to string in case it's a Pydantic enum or TradeType enum
-    normalized_trade_type = str(trade_type)
+    # Normalise to the canonical value ("BUY", "SELL", ...). str() on a
+    # (str, Enum) member returns "TradeTypeStr.BUY", which never matched.
+    normalized_trade_type = TradeType(trade_type).value
     ticker = symbol.upper()
     portfolio = db.query(Portfolio).filter(
         Portfolio.user_id == user_id,
@@ -74,13 +79,12 @@ def _update_portfolio_from_trade(
             db.add(portfolio)
 
     elif normalized_trade_type == TradeType.SELL.value:
-        if portfolio:
-            if portfolio.quantity >= quantity:
-                portfolio.quantity -= quantity
-                if portfolio.quantity == 0:
-                    db.delete(portfolio)
-            else:
-                raise ValueError(f"Insufficient shares for {ticker}")
+        owned = portfolio.quantity if portfolio else 0.0
+        if owned + _QUANTITY_EPSILON < quantity:
+            raise ValueError(f"Insufficient shares for {ticker}")
+        portfolio.quantity -= quantity
+        if portfolio.quantity <= _QUANTITY_EPSILON:
+            db.delete(portfolio)
 
     elif normalized_trade_type == TradeType.SHORT.value:
         if portfolio:
@@ -208,12 +212,25 @@ def update_trade(
             detail="Trade not found",
         )
     
+    # A closed trade already has a history row; reopening it would let the
+    # same trade be closed (and its P/L counted) twice.
+    if trade.status == TradeStatus.CLOSED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Closed trades cannot be modified",
+        )
+
     update_data = trade_update.dict(exclude_unset=True)
-    
+
     for field, value in update_data.items():
         if value is not None:
             if field == "status":
                 value = _parse_trade_status(value)
+                if value == TradeStatus.CLOSED:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Use POST /trade/{trade_id}/close to close a trade",
+                    )
             setattr(trade, field, value)
     
     trade.updated_at = datetime.utcnow()
@@ -252,15 +269,20 @@ def close_trade(
             detail="Trade is already closed",
         )
     
-    # Calculate profit/loss
-    if trade.trade_type in {TradeType.BUY, TradeType.SHORT}:
-        profit_loss = (exit_price - trade.entry_price) * trade.quantity
+    # Calculate profit/loss. A long position gains when the price rises; a
+    # short position gains when it falls.
+    trade_type = TradeType(trade.trade_type)
+    if trade_type == TradeType.BUY:
+        price_move = exit_price - trade.entry_price
+    elif trade_type == TradeType.SHORT:
+        price_move = trade.entry_price - exit_price
     else:
-        profit_loss = 0.0
+        price_move = 0.0
+    profit_loss = price_move * trade.quantity
 
     profit_loss_percent = None
     if trade.entry_price > 0:
-        profit_loss_percent = ((exit_price - trade.entry_price) / trade.entry_price) * 100
+        profit_loss_percent = (price_move / trade.entry_price) * 100
 
     # Calculate duration
     duration_minutes = int((datetime.utcnow() - trade.created_at).total_seconds() / 60)

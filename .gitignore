@@ -1,5 +1,35 @@
+# Python
 .venv/
 __pycache__/
-.env
-node_modules/
 *.pyc
+.pytest_cache/
+
+# Environment / secrets
+.env
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Generated test / build output
+test-results.txt
+*TEST_RESULTS*.json
+*TEST_RESULTS*.txt
+*TEST_OUTPUT*.txt
+*TEST_REPORT*.json
+build_output.txt
+
+# Local design exports
+.stitch-temp/
+
+# OS / editor
+.DS_Store
+
+# Editor / manual backups
+*.bak

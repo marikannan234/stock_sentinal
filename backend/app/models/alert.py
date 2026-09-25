@@ -122,7 +122,8 @@ class Alert(Base):
         SQLEnum(AlertType),
         nullable=False,
         default=AlertType.PRICE,
-        index=True  # Index for alert type filtering
+        # Indexed by ix_alerts_alert_type in __table_args__; index=True here
+        # would declare a second index with the same name.
     )
     
     last_price: Mapped[Optional[float]] = mapped_column(
