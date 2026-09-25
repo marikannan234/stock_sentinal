@@ -11,8 +11,9 @@ from sqlalchemy import desc
 
 from app.api.deps import get_current_user, get_db_session
 from app.models.user import User
-from app.models.trading import Trade, TradeHistory, TradeStatus, TradeType
-from app.models.portfolio import Portfolio
+from app.models.trading import Trade, TradeHistory, TradeStatus
+from app.services import trading_service
+from app.services.trading_service import TradeRequest, TradingError
 from app.schemas.trading import (
     TradeCreate,
     TradeRead,
@@ -24,10 +25,6 @@ from app.schemas.trading import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/trade", tags=["trading"])
-
-# Quantities are stored as floats; treat anything smaller than this as zero so
-# e.g. buying 0.1 + 0.2 and selling 0.3 fully closes the position.
-_QUANTITY_EPSILON = 1e-9
 
 
 def _parse_trade_status(status_value: str) -> TradeStatus:
@@ -42,67 +39,6 @@ def _parse_trade_status(status_value: str) -> TradeStatus:
         ) from exc
 
 
-def _update_portfolio_from_trade(
-    user_id: int,
-    symbol: str,
-    quantity: float,
-    price: float,
-    trade_type: str,
-    db: Session,
-) -> None:
-    """Update user's portfolio based on trade."""
-
-    # Normalise to the canonical value ("BUY", "SELL", ...). str() on a
-    # (str, Enum) member returns "TradeTypeStr.BUY", which never matched.
-    normalized_trade_type = TradeType(trade_type).value
-    ticker = symbol.upper()
-    portfolio = db.query(Portfolio).filter(
-        Portfolio.user_id == user_id,
-        Portfolio.ticker == ticker
-    ).first()
-
-    if normalized_trade_type == TradeType.BUY.value:
-        if portfolio:
-            portfolio.quantity += quantity
-            portfolio.average_price = (
-                (portfolio.average_price * (portfolio.quantity - quantity) + price * quantity) 
-                / portfolio.quantity
-            )
-        else:
-            portfolio = Portfolio(
-                user_id=user_id,
-                ticker=ticker,
-                quantity=quantity,
-                average_price=price,
-                created_at=datetime.utcnow(),
-            )
-            db.add(portfolio)
-
-    elif normalized_trade_type == TradeType.SELL.value:
-        owned = portfolio.quantity if portfolio else 0.0
-        if owned + _QUANTITY_EPSILON < quantity:
-            raise ValueError(f"Insufficient shares for {ticker}")
-        portfolio.quantity -= quantity
-        if portfolio.quantity <= _QUANTITY_EPSILON:
-            db.delete(portfolio)
-
-    elif normalized_trade_type == TradeType.SHORT.value:
-        if portfolio:
-            portfolio.quantity -= quantity
-        else:
-            portfolio = Portfolio(
-                user_id=user_id,
-                ticker=ticker,
-                quantity=-quantity,
-                average_price=price,
-                created_at=datetime.utcnow(),
-            )
-            db.add(portfolio)
-
-    elif normalized_trade_type == TradeType.CLOSE.value:
-        if portfolio:
-            portfolio.quantity = 0
-            db.delete(portfolio)
 
 
 @router.post("/", response_model=TradeRead, status_code=status.HTTP_201_CREATED)
@@ -111,42 +47,28 @@ def create_trade(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> Trade:
-    """Create a new trade."""
-    
+    """Execute a trade at the current market price.
+
+    `entry_price` in the request body is ignored: the execution price is
+    always resolved server-side. BUY/SHORT open a position; SELL reduces a
+    long position; CLOSE closes the whole position (quantity is ignored).
+    """
     try:
-        _update_portfolio_from_trade(
-            user_id=current_user.id,
-            symbol=trade_create.symbol,
-            quantity=trade_create.quantity,
-            price=trade_create.entry_price,
-            trade_type=trade_create.trade_type,
-            db=db,
+        trade = trading_service.execute_trade(
+            db,
+            current_user.id,
+            TradeRequest(
+                symbol=trade_create.symbol,
+                quantity=trade_create.quantity,
+                trade_type=trade_create.trade_type,
+                notes=trade_create.notes,
+            ),
         )
-        
-        trade = Trade(
-            user_id=current_user.id,
-            symbol=trade_create.symbol,
-            quantity=trade_create.quantity,
-            entry_price=trade_create.entry_price,
-            current_price=trade_create.entry_price,
-            trade_type=TradeType(trade_create.trade_type),
-            status=TradeStatus.OPEN,
-            created_at=datetime.utcnow(),
-        )
-        
-        db.add(trade)
-        db.commit()
-        db.refresh(trade)
-        
-        logger.info(f"Trade {trade.id} created for user {current_user.id}: {trade_create.symbol}")
-        return trade
-        
-    except ValueError as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+    except TradingError as exc:
+        raise exc.to_http() from exc
+
+    logger.info(f"Trade {trade.id} executed for user {current_user.id}: {trade.trade_type.value} {trade.symbol}")
+    return trade
 
 
 @router.get("/", response_model=List[TradeRead])
@@ -192,6 +114,7 @@ def get_trade(
     return trade
 
 
+
 @router.put("/{trade_id}", response_model=TradeRead)
 def update_trade(
     trade_id: int,
@@ -199,19 +122,22 @@ def update_trade(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> Trade:
-    """Update a trade."""
-    
+    """Update a trade's notes.
+
+    Status and prices are managed by the server: use POST /trade/{id}/close to
+    close a trade. Changing them here would desynchronise the portfolio.
+    """
     trade = db.query(Trade).filter(
         Trade.id == trade_id,
         Trade.user_id == current_user.id
     ).first()
-    
+
     if not trade:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Trade not found",
         )
-    
+
     # A closed trade already has a history row; reopening it would let the
     # same trade be closed (and its P/L counted) twice.
     if trade.status == TradeStatus.CLOSED:
@@ -221,24 +147,25 @@ def update_trade(
         )
 
     update_data = trade_update.dict(exclude_unset=True)
+    if update_data.get("status") is not None:
+        if _parse_trade_status(update_data["status"]) == TradeStatus.CLOSED:
+            detail = "Use POST /trade/{trade_id}/close to close a trade"
+        else:
+            detail = "Trade status is managed by the server"
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+    if update_data.get("current_price") is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trade prices are set by the server",
+        )
 
-    for field, value in update_data.items():
-        if value is not None:
-            if field == "status":
-                value = _parse_trade_status(value)
-                if value == TradeStatus.CLOSED:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Use POST /trade/{trade_id}/close to close a trade",
-                    )
-            setattr(trade, field, value)
-    
+    if "notes" in update_data:
+        trade.notes = update_data["notes"]
     trade.updated_at = datetime.utcnow()
-    
-    db.add(trade)
+
     db.commit()
     db.refresh(trade)
-    
+
     logger.info(f"Trade {trade.id} updated by user {current_user.id}")
     return trade
 
@@ -246,74 +173,21 @@ def update_trade(
 @router.post("/{trade_id}/close", response_model=TradeHistoryRead)
 def close_trade(
     trade_id: int,
-    exit_price: float,
+    exit_price: Optional[float] = Query(
+        None,
+        deprecated=True,
+        description="Ignored. Trades are closed at the current market price.",
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> TradeHistory:
-    """Close a trade and move to history."""
-    
-    trade = db.query(Trade).filter(
-        Trade.id == trade_id,
-        Trade.user_id == current_user.id
-    ).first()
-    
-    if not trade:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trade not found",
-        )
-    
-    if trade.status == TradeStatus.CLOSED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Trade is already closed",
-        )
-    
-    # Calculate profit/loss. A long position gains when the price rises; a
-    # short position gains when it falls.
-    trade_type = TradeType(trade.trade_type)
-    if trade_type == TradeType.BUY:
-        price_move = exit_price - trade.entry_price
-    elif trade_type == TradeType.SHORT:
-        price_move = trade.entry_price - exit_price
-    else:
-        price_move = 0.0
-    profit_loss = price_move * trade.quantity
+    """Close an open BUY or SHORT trade at the current market price."""
+    try:
+        history = trading_service.close_trade(db, current_user.id, trade_id)
+    except TradingError as exc:
+        raise exc.to_http() from exc
 
-    profit_loss_percent = None
-    if trade.entry_price > 0:
-        profit_loss_percent = (price_move / trade.entry_price) * 100
-
-    # Calculate duration
-    duration_minutes = int((datetime.utcnow() - trade.created_at).total_seconds() / 60)
-    
-    # Create history record
-    history = TradeHistory(
-        trade_id=trade.id,
-        user_id=current_user.id,
-        symbol=trade.symbol,
-        quantity=trade.quantity,
-        entry_price=trade.entry_price,
-        exit_price=exit_price,
-        profit_loss=profit_loss,
-        profit_loss_percent=profit_loss_percent,
-        duration_minutes=duration_minutes,
-        trade_type=trade.trade_type,
-        notes=trade.notes,
-        closed_at=datetime.utcnow(),
-    )
-    
-    # Update trade status
-    trade.status = TradeStatus.CLOSED
-    trade.current_price = exit_price
-    trade.updated_at = datetime.utcnow()
-    
-    db.add(trade)
-    db.add(history)
-    db.commit()
-    db.refresh(history)
-    
-    logger.info(f"Trade {trade.id} closed by user {current_user.id}")
+    logger.info(f"Trade {trade_id} closed by user {current_user.id}")
     return history
 
 

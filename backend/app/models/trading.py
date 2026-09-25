@@ -5,10 +5,11 @@ Database models for user settings, support tickets, and trades.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum as SQLEnum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum as SQLEnum, Float, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -77,6 +78,14 @@ class SupportTicket(Base):
     user: Mapped["User"] = relationship("User", back_populates="support_tickets")
 
 
+# The trades/trade_history enum columns are VARCHAR(20) in the database (see
+# migration 0002), not native PostgreSQL enum types. native_enum=False keeps
+# SQLAlchemy from casting values to a non-existent "tradetype" type, which
+# broke multi-row inserts (e.g. a SELL that closes several lots).
+def _varchar_enum(enum_class: type[Enum]) -> SQLEnum:
+    return SQLEnum(enum_class, native_enum=False, length=20)
+
+
 class TradeType(str, Enum):
     """Trade type enumeration."""
 
@@ -109,12 +118,12 @@ class Trade(Base):
         index=True,
     )
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
-    quantity: Mapped[float] = mapped_column(Float, nullable=False)
-    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
-    current_price: Mapped[float] = mapped_column(Float, nullable=False, default=0)
-    trade_type: Mapped[TradeType] = mapped_column(SQLEnum(TradeType), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
+    entry_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    current_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    trade_type: Mapped[TradeType] = mapped_column(_varchar_enum(TradeType), nullable=False)
     status: Mapped[TradeStatus] = mapped_column(
-        SQLEnum(TradeStatus),
+        _varchar_enum(TradeStatus),
         default=TradeStatus.OPEN,
         nullable=False,
     )
@@ -156,11 +165,11 @@ class TradeHistory(Base):
         nullable=True,
     )
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
-    quantity: Mapped[float] = mapped_column(Float, nullable=False)
-    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
-    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
-    trade_type: Mapped[TradeType] = mapped_column(SQLEnum(TradeType), nullable=False)
-    profit_loss: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
+    entry_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    exit_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    trade_type: Mapped[TradeType] = mapped_column(_varchar_enum(TradeType), nullable=False)
+    profit_loss: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
     profit_loss_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

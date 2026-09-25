@@ -144,8 +144,9 @@ export const portfolioService = {
     const { data } = await api.get<PortfolioSummary>('/portfolio/summary');
     return data;
   },
-  async add(ticker: string, quantity: number, price: number) {
-    const { data } = await api.post<PortfolioHolding[]>('/portfolio', { ticker, quantity, price });
+  // Buys at the current market price; the server sets the execution price.
+  async add(ticker: string, quantity: number) {
+    const { data } = await api.post<PortfolioHolding[]>('/portfolio', { ticker, quantity });
     return data;
   },
   async allocation() {

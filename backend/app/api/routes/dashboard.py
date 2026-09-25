@@ -54,7 +54,7 @@ _news_refresh_lock = threading.Lock()
 _news_refresh_in_progress = False
 
 
-def _fallback_portfolio_summary() -> PortfolioSummaryResponse:
+def _fallback_portfolio_summary(current_user: User) -> PortfolioSummaryResponse:
     return PortfolioSummaryResponse(
         total_invested=0.0,
         current_value=0.0,
@@ -62,7 +62,7 @@ def _fallback_portfolio_summary() -> PortfolioSummaryResponse:
         percent_pl=0.0,
         day_pl=0.0,
         day_percent=0.0,
-        buying_power=0.0,
+        buying_power=float(current_user.cash_balance),
     )
 
 
@@ -125,10 +125,10 @@ def _get_dashboard_portfolio(current_user: User, db: Session) -> PortfolioSummar
             return future.result(timeout=DASHBOARD_SECTION_TIMEOUT_SECONDS)
     except FutureTimeoutError:
         logger.debug("Dashboard portfolio section timed out; returning fallback data")
-        return _fallback_portfolio_summary()
+        return _fallback_portfolio_summary(current_user)
     except Exception as e:
         logger.error("Error fetching dashboard portfolio summary: %s", e)
-        return _fallback_portfolio_summary()
+        return _fallback_portfolio_summary(current_user)
 
 
 def _get_dashboard_market(db: Session) -> MarketSummary:

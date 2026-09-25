@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import lru_cache
 import json
 from pydantic_settings import BaseSettings
@@ -43,6 +44,10 @@ class Settings(BaseSettings):
 
     # External APIs
     FINNHUB_API_KEY: str | None = None
+
+    # Paper trading: cash every new account starts with (existing accounts
+    # were backfilled to this value by migration 0006).
+    PAPER_TRADING_STARTING_CASH: Decimal = Field(default=Decimal("100000.00"), ge=0)
 
     # Email Configuration
     # ✅ CRITICAL FIX: Email credentials MUST be provided via environment variables

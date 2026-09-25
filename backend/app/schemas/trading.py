@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ============================================
@@ -110,13 +110,17 @@ class SupportTicketRead(SupportTicketBase):
 class TradeBase(BaseModel):
     symbol: str = Field(min_length=1, max_length=20)
     quantity: float = Field(gt=0)
-    entry_price: float = Field(gt=0)
     trade_type: TradeTypeStr
     notes: Optional[str] = Field(default=None, max_length=500)
 
 
 class TradeCreate(TradeBase):
-    pass
+    # Accepted for backward compatibility but ignored: trades execute at the
+    # server-side market price.
+    entry_price: Optional[float] = Field(
+        default=None,
+        description="Ignored. Trades execute at the current market price.",
+    )
 
 
 class TradeUpdate(BaseModel):
@@ -127,6 +131,7 @@ class TradeUpdate(BaseModel):
 
 class TradeRead(TradeBase):
     id: int
+    entry_price: float
     user_id: int
     current_price: float
     status: str
@@ -161,11 +166,11 @@ class TradeHistoryRead(BaseModel):
 
     class Config:
         from_attributes = True
-    
-    @property
-    def computed_status(self) -> str:
-        """Compute status based on exit_price."""
-        return "closed" if self.exit_price is not None else "open"
+
+    @model_validator(mode="after")
+    def _compute_status(self) -> "TradeHistoryRead":
+        self.status = "closed" if self.exit_price is not None else "open"
+        return self
 
 
 class TradeHistorySummary(BaseModel):

@@ -33,7 +33,6 @@ const primaryNav: NavItem[] = [
 function QuickTradeModal({ onClose }: { onClose: () => void }) {
   const [symbol, setSymbol] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [price, setPrice] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState('');
@@ -41,16 +40,15 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!symbol || !quantity || !price) {
+    if (!symbol || !quantity) {
       setError('All fields required');
       return;
     }
 
     const qty = Number(quantity);
-    const priceNum = Number(price);
 
-    if (qty <= 0 || priceNum <= 0) {
-      setError('Quantity and price must be positive');
+    if (qty <= 0) {
+      setError('Quantity must be positive');
       return;
     }
 
@@ -59,9 +57,9 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
 
     try {
       if (side === 'buy') {
-        // BUY: Add to portfolio using API service (includes Authorization token)
-        await portfolioService.add((symbol || "").toUpperCase(), qty, priceNum);
-        setToast(`✓ Bought ${qty} ${(symbol || "").toUpperCase()} @ $${priceNum.toFixed(2)}`);
+        // BUY at the current market price (the server sets the price)
+        await portfolioService.add((symbol || "").toUpperCase(), qty);
+        setToast(`✓ Bought ${qty} ${(symbol || "").toUpperCase()} at market price`);
       } else {
         // SELL: Validate portfolio before removing
         // 1. Get current portfolio holdings
@@ -83,19 +81,18 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
           data: { quantity: qty },
         });
         
-        setToast(`✓ Sold ${qty} ${(symbol || "").toUpperCase()} @ $${priceNum.toFixed(2)}`);
+        setToast(`✓ Sold ${qty} ${(symbol || "").toUpperCase()} at market price`);
       }
 
       setTimeout(() => {
         // Dispatch custom event to refresh portfolio and trade history
         window.dispatchEvent(new CustomEvent('tradeCompleted', {
-          detail: { symbol, qty, priceNum, side }
+          detail: { symbol, qty, side }
         }));
         
         setToast('');
         setSymbol('');
         setQuantity('');
-        setPrice('');
         onClose();
       }, 2000);
     } catch (err: unknown) {
@@ -107,7 +104,7 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const isFormValid = symbol && quantity && price && Number(quantity) > 0 && Number(price) > 0;
+  const isFormValid = symbol && quantity && Number(quantity) > 0;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -161,16 +158,7 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
               placeholder="Quantity"
               required
             />
-            <input
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              type="number"
-              min="0.01"
-              step="0.01"
-              className="w-full rounded-xl bg-[var(--surface-lowest)] px-4 py-3 font-mono text-sm text-white outline-none placeholder:text-[var(--on-surface-variant)] focus:ring-2 focus:ring-[var(--primary)]/40"
-              placeholder="Price (USD)"
-              required
-            />
+            <p className="text-xs text-[var(--on-surface-variant)]">Executes at the current market price.</p>
             {error && <p className="text-xs text-tertiary font-semibold">{error}</p>}
             <button
               type="submit"

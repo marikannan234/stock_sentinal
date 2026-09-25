@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -21,8 +22,10 @@ class Portfolio(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     ticker: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
-    quantity: Mapped[float] = mapped_column(Float, nullable=False)
-    average_price: Mapped[float] = mapped_column(Float, nullable=False)
+    # Derived from the user's open trades (see app.services.trading_service).
+    # Positive = long, negative = short.
+    quantity: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
+    average_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,

@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 
 import yfinance as yf
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,9 @@ from app.api.routes.stock import fetch_stock_quote
 from app.api.routes.search import _finnhub_symbol_search
 from app.models.user import User
 from app.models.portfolio import Portfolio
+from app.models.trading import TradeType
+from app.services import trading_service
+from app.services.trading_service import TradeRequest, TradingError
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 logger = logging.getLogger(__name__)
@@ -34,7 +37,17 @@ class HoldingItem(BaseModel):
 class PortfolioAddBody(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=16, description="Stock ticker (e.g. AAPL)")
     quantity: float = Field(..., gt=0, description="Number of shares")
-    price: float = Field(..., gt=0, description="Price per share for this lot")
+    # Accepted for backward compatibility but ignored: buys execute at the
+    # server-side market price.
+    price: float | None = Field(default=None, description="Ignored. Buys execute at the current market price.")
+
+
+class PortfolioSellBody(BaseModel):
+    quantity: float | None = Field(
+        default=None,
+        gt=0,
+        description="Shares to sell. Omit to close the whole position.",
+    )
 
 
 class PortfolioSummaryResponse(BaseModel):
@@ -44,7 +57,7 @@ class PortfolioSummaryResponse(BaseModel):
     percent_pl: float = Field(..., description="(total_pl / total_invested) * 100, or 0 if no holdings")
     day_pl: float = Field(..., description="Today's profit/loss across the portfolio")
     day_percent: float = Field(..., description="Today's profit/loss percentage")
-    buying_power: float = Field(..., description="Available cash buying power if known, otherwise 0")
+    buying_power: float = Field(..., description="Available paper-trading cash")
 
 
 class AllocationItem(BaseModel):
@@ -202,7 +215,7 @@ def get_portfolio_summary(
         percent_pl=round(percent_pl, 2),
         day_pl=round(day_pl, 2),
         day_percent=round(day_percent, 2),
-        buying_power=0.0,
+        buying_power=float(current_user.cash_balance),
     )
 
 
@@ -303,7 +316,7 @@ def add_or_update_position(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> list[HoldingItem]:
-    """Add shares to a position or create a new position. Recalculates average price."""
+    """Buy shares at the current market price (same engine as POST /trade/)."""
     ticker_upper = body.ticker.strip().upper()
     logger.info("Portfolio add/update requested", extra={"user_id": current_user.id, "ticker": ticker_upper})
     if not ticker_upper:
@@ -327,35 +340,7 @@ def add_or_update_position(
         )
     # ──────────────────────────────────────────────────────────────────
 
-    existing = (
-        db.query(Portfolio)
-        .filter(Portfolio.user_id == current_user.id, Portfolio.ticker == ticker_upper)
-        .first()
-    )
-
-    if existing:
-        # Update: new quantity = old + new, new average = (old_qty * old_avg + new_qty * price) / new_qty
-        new_quantity = float(existing.quantity or 0) + body.quantity
-        if new_quantity <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Updated quantity must be greater than zero",
-            )
-        new_average = ((float(existing.quantity or 0) * float(existing.average_price or 0)) + (body.quantity * body.price)) / new_quantity
-        existing.quantity = new_quantity
-        existing.average_price = new_average
-        db.commit()
-    else:
-        db.add(
-            Portfolio(
-                user_id=current_user.id,
-                ticker=ticker_upper,
-                quantity=body.quantity,
-                average_price=body.price,
-            )
-        )
-        db.commit()
-
+    _execute(db, current_user, ticker_upper, TradeType.BUY, body.quantity)
     return _holdings_list(db, current_user.id)
 
 
@@ -365,41 +350,52 @@ def remove_position_by_body(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> list[HoldingItem]:
-    """Remove a ticker from the current user's portfolio using a request body."""
+    """Close the whole position in a ticker at the current market price."""
     return _remove_position(body.ticker, current_user, db)
 
 
-@router.delete("/{ticker}", response_model=list[HoldingItem], summary="Remove holding")
+@router.delete("/{ticker}", response_model=list[HoldingItem], summary="Sell holding")
 def remove_position(
     ticker: str,
+    body: PortfolioSellBody | None = Body(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> list[HoldingItem]:
-    """Remove a ticker from the current user's portfolio."""
-    return _remove_position(ticker, current_user, db)
+    """Sell `quantity` shares at the current market price, or close the whole
+    position when no quantity is given."""
+    return _remove_position(ticker, current_user, db, quantity=body.quantity if body else None)
 
 
 def _remove_position(
     ticker: str,
     current_user: User,
     db: Session,
+    quantity: float | None = None,
 ) -> list[HoldingItem]:
     ticker_upper = ticker.strip().upper()
     logger.info("Portfolio remove requested", extra={"user_id": current_user.id, "ticker": ticker_upper})
     if not ticker_upper:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ticker cannot be empty")
 
-    position = (
-        db.query(Portfolio)
-        .filter(Portfolio.user_id == current_user.id, Portfolio.ticker == ticker_upper)
-        .first()
-    )
-    if not position:
+    if not trading_service.has_position(db, current_user.id, ticker_upper):
         return _holdings_list(db, current_user.id)
 
-    db.delete(position)
-    db.commit()
+    if quantity is None:
+        _execute(db, current_user, ticker_upper, TradeType.CLOSE, None)
+    else:
+        _execute(db, current_user, ticker_upper, TradeType.SELL, quantity)
     return _holdings_list(db, current_user.id)
+
+
+def _execute(db: Session, user: User, ticker: str, trade_type: TradeType, quantity: float | None) -> None:
+    try:
+        trading_service.execute_trade(
+            db,
+            user.id,
+            TradeRequest(symbol=ticker, quantity=quantity, trade_type=trade_type),
+        )
+    except TradingError as exc:
+        raise exc.to_http() from exc
 
 
 # ============================================
@@ -445,7 +441,7 @@ def get_portfolio_dashboard(
             percent_pl=round(percent_pl, 2),
             day_pl=round(day_pl, 2),
             day_percent=round(day_percent, 2),
-            buying_power=0.0,
+            buying_power=float(current_user.cash_balance),
         )
         
         # Calculate allocation from holdings
@@ -486,7 +482,7 @@ def get_portfolio_dashboard(
                 percent_pl=0.0,
                 day_pl=0.0,
                 day_percent=0.0,
-                buying_power=0.0,
+                buying_power=float(current_user.cash_balance),
             ),
             allocation=PortfolioAllocationResponse(
                 total_value=0.0,

@@ -11,7 +11,6 @@ import type { LiveQuote, PortfolioAllocationResponse, PortfolioGrowthPoint, Port
 import { formatCurrency, formatPercent, exportToCSV } from '@/lib/sentinel-utils';
 
 const ranges: Array<'1d' | '1w' | '1m' | '1y'> = ['1d', '1w', '1m', '1y'];
-const roundValue = (value: number) => Math.round(value * 100) / 100;
 
 export default function PortfolioPage() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
@@ -36,7 +35,6 @@ export default function PortfolioPage() {
   const symbolWrapRef = useRef<HTMLDivElement>(null);
 
   const [addQty, setAddQty] = useState('');
-  const [addPrice, setAddPrice] = useState('');
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
 
@@ -102,7 +100,6 @@ export default function PortfolioPage() {
     setSymbolSuggestions([]);
     setSymbolDropdownOpen(false);
     setAddQty('');
-    setAddPrice('');
     setAddError('');
   }
 
@@ -220,88 +217,15 @@ export default function PortfolioPage() {
       setAddError('Please search and select a valid stock symbol from the dropdown.');
       return;
     }
-    if (!addQty || !addPrice) return;
+    if (!addQty) return;
 
     const quantity = Number(addQty);
-    const price = Number(addPrice);
-    const normalizedSymbol = symbolValidated.toUpperCase();
-    const previousHoldings = holdings;
-    const previousSummary = summary;
-    const existingHolding = holdings.find((holding) => holding.ticker.toUpperCase() === normalizedSymbol);
-    const optimisticCurrentPrice = existingHolding?.current_price ?? price;
-    const optimisticHoldings = existingHolding
-      ? holdings.map((holding) => {
-          if (holding.ticker.toUpperCase() !== normalizedSymbol) {
-            return holding;
-          }
-
-          const nextQuantity = holding.quantity + quantity;
-          const nextAveragePrice = ((holding.quantity * holding.average_price) + (quantity * price)) / nextQuantity;
-          const nextCurrentValue = nextQuantity * optimisticCurrentPrice;
-          const nextInvestedAmount = nextQuantity * nextAveragePrice;
-          const nextPlAmount = nextCurrentValue - nextInvestedAmount;
-          const nextPlPercent = nextInvestedAmount > 0 ? (nextPlAmount / nextInvestedAmount) * 100 : 0;
-
-          return {
-            ...holding,
-            quantity: roundValue(nextQuantity),
-            average_price: roundValue(nextAveragePrice),
-            current_price: roundValue(optimisticCurrentPrice),
-            current_value: roundValue(nextCurrentValue),
-            invested_amount: roundValue(nextInvestedAmount),
-            pl_amount: roundValue(nextPlAmount),
-            pl_percent: roundValue(nextPlPercent),
-          };
-        })
-      : [
-          {
-            ticker: normalizedSymbol,
-            quantity,
-            average_price: price,
-            current_price: price,
-            current_value: roundValue(quantity * price),
-            invested_amount: roundValue(quantity * price),
-            pl_amount: 0,
-            pl_percent: 0,
-            day_change: 0,
-            day_change_percent: 0,
-            name: symbolName || normalizedSymbol,
-            asset_class: 'Technology',
-          },
-          ...holdings,
-        ];
-
-    const optimisticInvestedIncrement = quantity * price;
-    const optimisticCurrentIncrement = quantity * optimisticCurrentPrice;
-
-    setHoldings(optimisticHoldings);
-    setSummary((currentSummary) => {
-      if (!currentSummary) {
-        return currentSummary;
-      }
-
-      const nextTotalInvested = roundValue(currentSummary.total_invested + optimisticInvestedIncrement);
-      const nextCurrentValue = roundValue(currentSummary.current_value + optimisticCurrentIncrement);
-      const nextTotalPl = roundValue(nextCurrentValue - nextTotalInvested);
-      const nextPercentPl = nextTotalInvested > 0 ? roundValue((nextTotalPl / nextTotalInvested) * 100) : 0;
-      const baseForDayPercent = nextCurrentValue - currentSummary.day_pl;
-      const nextDayPercent = baseForDayPercent > 0 ? roundValue((currentSummary.day_pl / baseForDayPercent) * 100) : 0;
-
-      return {
-        ...currentSummary,
-        total_invested: nextTotalInvested,
-        current_value: nextCurrentValue,
-        total_pl: nextTotalPl,
-        percent_pl: nextPercentPl,
-        day_percent: nextDayPercent,
-      };
-    });
 
     setAddLoading(true);
     setAddError('');
     try {
-      // Send add holding request
-      await portfolioService.add(symbolValidated, quantity, price);
+      // Buy at the current market price; the server sets the execution price
+      await portfolioService.add(symbolValidated, quantity);
       resetAddForm();
       setShowAddForm(false);
 
@@ -335,8 +259,6 @@ export default function PortfolioPage() {
         }
       }, 500);
     } catch (err) {
-      setHoldings(previousHoldings);
-      setSummary(previousSummary);
       setAddError(getErrorMessage(err));
       console.error('Error adding holding:', err);
     } finally {
@@ -410,7 +332,7 @@ export default function PortfolioPage() {
           <SurfaceCard className="mb-6 p-6">
             <h3 className="mb-4 text-base font-bold text-white">Add New Holding</h3>
             <form onSubmit={handleAddHolding}>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 mb-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 mb-4">
                 {/* ── Symbol autocomplete ── */}
                 <div ref={symbolWrapRef} className="relative">
                   <div className={`flex items-center rounded-xl px-3 py-3 text-sm font-mono outline-none transition-all ${
@@ -475,19 +397,8 @@ export default function PortfolioPage() {
                   placeholder="Quantity"
                   required
                 />
-
-                {/* ── Avg Price ── */}
-                <input
-                  value={addPrice}
-                  onChange={(e) => setAddPrice(e.target.value)}
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  className="rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm font-mono text-white outline-none placeholder:text-[var(--on-surface-variant)] focus:ring-2 focus:ring-[var(--primary)]/40"
-                  placeholder="Avg Price (USD)"
-                  required
-                />
               </div>
+              <p className="mb-3 text-xs text-[var(--on-surface-variant)]">Buys at the current market price using your available cash.</p>
               {addError && <p className="mb-3 text-xs text-tertiary">{addError}</p>}
               <div className="flex gap-3">
                 <button

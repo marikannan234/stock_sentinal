@@ -1,7 +1,6 @@
 .next
 node_modules
 .stitch-temp
-FRONTEND_DOCUMENTATION.md
 dev-server.out.log
 dev-server.err.log
 *.log

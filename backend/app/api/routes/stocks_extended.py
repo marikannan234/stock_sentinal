@@ -395,6 +395,10 @@ def _fetch_yfinance_current_price(symbol: str) -> Optional[float]:
                 data = future.result(timeout=2)
                 if data is not None and hasattr(data, "empty") and not data.empty:
                     close_value = data.get("Close") if isinstance(data, dict) else (data["Close"] if "Close" in data.columns else None)
+                    # Newer yfinance returns multi-index columns, so "Close" is a
+                    # one-column DataFrame (per ticker) rather than a Series.
+                    if isinstance(close_value, pd.DataFrame):
+                        close_value = close_value.iloc[:, 0].dropna()
                     if close_value is not None:
                         price = float(close_value.iloc[-1]) if hasattr(close_value, "iloc") else float(close_value[-1]) if len(close_value) > 0 else None
                         if price and price > 0:

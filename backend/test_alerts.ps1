@@ -9,6 +9,8 @@
 #   .\test_alerts.ps1                    (Production mode, 10-min cooldown)
 #   .\test_alerts.ps1 -DevMode            (Dev mode, no cooldown)
 #   .\test_alerts.ps1 -Verbose             (Show detailed output)
+#
+# Requires STOCK_SENTINEL_TOKEN, or STOCK_SENTINEL_EMAIL + STOCK_SENTINEL_PASSWORD (see below).
 
 param(
     [switch]$DevMode = $false,
@@ -16,8 +18,29 @@ param(
 )
 
 # Configuration
-$TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0aGFsYXBhdGh5a2FubmFuMTIzQGdtYWlsLmNvbSIsImV4cCI6MTc3NTEzODM2OH0.KgmlnUl-vOR1_HUNeGwcPgbN6EG-6K2I6Dn522Fnk-0"
-$API_URL = "http://localhost:8000/api/alerts"
+# Authentication: nothing is hardcoded. Provide either
+#   $env:STOCK_SENTINEL_TOKEN      a Bearer token you obtained yourself, or
+#   $env:STOCK_SENTINEL_EMAIL and $env:STOCK_SENTINEL_PASSWORD  to log in at runtime.
+# Optional: $env:STOCK_SENTINEL_API_BASE (default http://localhost:8000/api)
+$API_BASE = if ($env:STOCK_SENTINEL_API_BASE) { $env:STOCK_SENTINEL_API_BASE.TrimEnd("/") } else { "http://localhost:8000/api" }
+$TOKEN = $env:STOCK_SENTINEL_TOKEN
+if (-not $TOKEN) {
+    if (-not ($env:STOCK_SENTINEL_EMAIL -and $env:STOCK_SENTINEL_PASSWORD)) {
+        Write-Host "Set STOCK_SENTINEL_TOKEN, or STOCK_SENTINEL_EMAIL and STOCK_SENTINEL_PASSWORD, before running this script." -ForegroundColor Red
+        exit 1
+    }
+    try {
+        $login = Invoke-RestMethod -Uri "$API_BASE/auth/login" -Method POST `
+            -ContentType "application/x-www-form-urlencoded" `
+            -Body @{ username = $env:STOCK_SENTINEL_EMAIL; password = $env:STOCK_SENTINEL_PASSWORD } `
+            -ErrorAction Stop
+        $TOKEN = $login.access_token
+    } catch {
+        Write-Host "Login failed: $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
+    }
+}
+$API_URL = "$API_BASE/alerts"
 $SCHEDULER_INTERVAL = 30
 
 Write-Host "`n" -NoNewline
