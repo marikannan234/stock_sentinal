@@ -40,6 +40,8 @@ Migration `0006_trading_cash_numeric` does four things:
 
 Set `PAPER_TRADING_STARTING_CASH` in the environment **before** running `0006` if you want a different backfill amount.
 
+Migration `0007_alert_type_parameters` makes `alerts.target_value` nullable (indicator alerts have no target) and adds the CHECK constraint `ck_alerts_type_parameters`. Before adding it, the migration deletes any existing alert that lacks the parameters its type requires, such as a `custom` alert without a condition, and prints how many it removed. Those alerts could never be evaluated. Downgrading sets missing targets to 0 and deletes nothing.
+
 ## Reverse proxy
 
 Proxy `/api` as normal HTTP. `/ws` needs WebSocket upgrade headers, for example with nginx:

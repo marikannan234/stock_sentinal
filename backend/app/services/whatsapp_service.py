@@ -17,6 +17,12 @@ except ImportError:  # pragma: no cover - handled gracefully at runtime
 logger = logging.getLogger(__name__)
 
 
+def mask_phone(number: str | None) -> str:
+    """'+919876543210' -> '***3210' (for logs)."""
+    digits = "".join(ch for ch in (number or "") if ch.isdigit())
+    return f"***{digits[-4:]}" if len(digits) >= 4 else "<invalid>"
+
+
 def send_whatsapp_alert(
     phone_number: str,
     symbol: str,
@@ -51,7 +57,7 @@ def send_whatsapp_alert(
         
         # Validate phone number
         if not phone_number or not phone_number.startswith("+"):
-            logger.warning(f"Invalid WhatsApp phone: {phone_number}")
+            logger.warning("Invalid WhatsApp phone number")
             return False
         
         # Initialize Twilio client
@@ -77,7 +83,7 @@ def send_whatsapp_alert(
         logger.info(
             f"✅ WhatsApp alert sent successfully",
             extra={
-                "to_phone": phone_number,
+                "to_phone": mask_phone(phone_number),
                 "symbol": symbol,
                 "message_sid": message.sid,
             },
@@ -89,7 +95,7 @@ def send_whatsapp_alert(
         logger.error(
             f"❌ Failed to send WhatsApp alert",
             extra={
-                "to_phone": phone_number,
+                "to_phone": mask_phone(phone_number),
                 "symbol": symbol,
                 "error": str(e),
                 "error_type": type(e).__name__,
@@ -125,7 +131,7 @@ def send_whatsapp_notification(
         
         # Validate inputs
         if not phone_number or not phone_number.startswith("+"):
-            logger.warning(f"Invalid WhatsApp phone: {phone_number}")
+            logger.warning("Invalid WhatsApp phone number")
             return False
         
         if not message or len(message) == 0:
@@ -145,7 +151,7 @@ def send_whatsapp_notification(
         logger.info(
             f"✅ WhatsApp message sent",
             extra={
-                "to_phone": phone_number,
+                "to_phone": mask_phone(phone_number),
                 "message_length": len(message),
                 "message_sid": msg.sid,
             },
@@ -157,7 +163,7 @@ def send_whatsapp_notification(
         logger.error(
             f"❌ Failed to send WhatsApp message",
             extra={
-                "to_phone": phone_number,
+                "to_phone": mask_phone(phone_number),
                 "error": str(e),
             },
             exc_info=True,

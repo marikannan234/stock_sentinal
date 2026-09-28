@@ -6,6 +6,7 @@ This is more reliable than async approaches when called from sync contexts like 
 """
 
 import logging
+import html
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -14,6 +15,14 @@ from typing import Optional
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def mask_email(address: Optional[str]) -> str:
+    """'jane.doe@example.com' -> 'ja***@example.com' (for logs)."""
+    if not address or "@" not in address:
+        return "<invalid>"
+    local, _, domain = address.partition("@")
+    return f"{local[:2]}***@{domain}"
 
 
 def send_alert_email_smtp(
@@ -40,12 +49,12 @@ def send_alert_email_smtp(
     try:
         # Validate email
         if not to_email or "@" not in to_email:
-            logger.warning(f"Invalid email address: {to_email}")
+            logger.warning("Invalid recipient email address")
             return False
         
         # Check if email is disabled
         if not settings.ENABLE_EMAIL_NOTIFICATIONS:
-            logger.debug(f"Email notifications disabled, skipping email to {to_email}")
+            logger.debug("Email notifications disabled, skipping email")
             return False
         
         # Create message
@@ -74,7 +83,7 @@ def send_alert_email_smtp(
         logger.info(
             f"✅ Alert email sent successfully",
             extra={
-                "to_email": to_email,
+                "to_email": mask_email(to_email),
                 "subject": subject,
             },
         )
@@ -84,7 +93,7 @@ def send_alert_email_smtp(
         logger.error(
             f"❌ SMTP error sending alert email: {e}",
             extra={
-                "to_email": to_email,
+                "to_email": mask_email(to_email),
                 "subject": subject,
                 "smtp_error": str(e),
             },
@@ -96,7 +105,7 @@ def send_alert_email_smtp(
         logger.error(
             f"❌ Failed to send alert email: {e}",
             extra={
-                "to_email": to_email,
+                "to_email": mask_email(to_email),
                 "subject": subject,
                 "error": str(e),
                 "error_type": type(e).__name__,
@@ -120,6 +129,7 @@ def send_alert_notification(
     ema_period: Optional[int] = None,
     rsi_value: Optional[float] = None,
     rsi_period: Optional[int] = None,
+    description: Optional[str] = None,
 ) -> bool:
     """
     Send alert notification email when a price alert triggers.
@@ -138,10 +148,18 @@ def send_alert_notification(
         ema_period: EMA period (optional)
         rsi_value: RSI value (optional)
         rsi_period: RSI period (optional)
+        description: Human-readable rule/outcome; used for alerts without a
+            target price (indicator alerts)
     
     Returns:
         True if email sent successfully, False otherwise
     """
+    if target_value is not None:
+        rule = f"{symbol} {condition} ${target_value:.2f}"
+    else:
+        rule = description or f"{symbol} {alert_type} alert"
+    rule_html = html.escape(rule)
+
     # Build subject
     subject = f"🔔 Stock Alert Triggered: {symbol}"
     
@@ -255,7 +273,7 @@ def send_alert_notification(
                 </div>
                 <div class="detail">
                     <span class="label">Alert Condition:</span>
-                    <span class="value"><strong>{symbol} {condition} ${target_value:.2f}</strong></span>
+                    <span class="value"><strong>{rule_html}</strong></span>
                 </div>
                 <div class="detail">
                     <span class="label">Triggered At:</span>
@@ -263,7 +281,7 @@ def send_alert_notification(
                 </div>
             </div>
             
-            <p>The current price of <strong>${current_price:.2f}</strong> matches your alert condition of <strong>{condition} ${target_value:.2f}</strong>.</p>
+            <p>The current price of <strong>${current_price:.2f}</strong> matches your alert condition: <strong>{rule_html}</strong>.</p>
             
             <p>This alert has been deactivated. You can view your portfolio and create new alerts anytime.</p>
             
@@ -287,7 +305,7 @@ STOCK ALERT TRIGGERED
 
 Symbol: {symbol}
 Current Price: ${current_price:.2f}
-Alert Condition: {symbol} {condition} ${target_value:.2f}
+Alert Condition: {rule}
 Triggered At: {triggered_at}
 
 Your price alert has been triggered.

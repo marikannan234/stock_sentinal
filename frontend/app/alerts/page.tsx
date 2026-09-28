@@ -9,14 +9,69 @@ import { useMarketStore } from '@/lib/store-v2';
 import type { AlertItem, LiveQuote } from '@/lib/types';
 import { formatDateLabel } from '@/lib/sentinel-utils';
 
-type AlertType = 'price' | 'percentage_change' | 'volume_spike' | 'crash';
+// 'indicator' and 'combined' are form groups; the API type is picked below.
+type AlertType = 'price' | 'percentage_change' | 'volume_spike' | 'crash' | 'custom' | 'indicator' | 'combined';
+type PeriodField = 'sma_period' | 'ema_period' | 'rsi_period';
 
 const ALERT_TYPES: { value: AlertType; label: string }[] = [
   { value: 'price', label: 'Price' },
   { value: 'percentage_change', label: '% Change' },
   { value: 'volume_spike', label: 'Volume Spike' },
   { value: 'crash', label: 'Crash' },
+  { value: 'custom', label: 'Custom' },
+  { value: 'indicator', label: 'Indicator' },
+  { value: 'combined', label: 'Combined' },
 ];
+
+const INDICATOR_TYPES: { value: string; label: string; period: PeriodField; defaultPeriod: string }[] = [
+  { value: 'sma_above', label: 'Price above SMA', period: 'sma_period', defaultPeriod: '50' },
+  { value: 'sma_below', label: 'Price below SMA', period: 'sma_period', defaultPeriod: '50' },
+  { value: 'sma_crossover', label: 'Price crosses SMA', period: 'sma_period', defaultPeriod: '50' },
+  { value: 'ema_above', label: 'Price above EMA', period: 'ema_period', defaultPeriod: '20' },
+  { value: 'ema_below', label: 'Price below EMA', period: 'ema_period', defaultPeriod: '20' },
+  { value: 'ema_crossover', label: 'Price crosses EMA', period: 'ema_period', defaultPeriod: '20' },
+  { value: 'rsi_overbought', label: 'RSI above 70 (overbought)', period: 'rsi_period', defaultPeriod: '14' },
+  { value: 'rsi_oversold', label: 'RSI below 30 (oversold)', period: 'rsi_period', defaultPeriod: '14' },
+  { value: 'rsi_crossover', label: 'RSI crosses 30 / 70', period: 'rsi_period', defaultPeriod: '14' },
+];
+
+const COMBINED_TYPES = [
+  { value: 'strong_buy_signal', label: 'Strong buy: price > SMA & EMA, RSI < 30' },
+  { value: 'strong_sell_signal', label: 'Strong sell: price < SMA & EMA, RSI > 70' },
+];
+
+const PERIOD_LIMITS: Record<PeriodField, number> = { sma_period: 500, ema_period: 500, rsi_period: 100 };
+
+function isValidPeriod(value: string, field: PeriodField) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 2 && n <= PERIOD_LIMITS[field];
+}
+
+function isPositiveNumber(value: string) {
+  return value !== '' && !isNaN(Number(value)) && Number(value) > 0;
+}
+
+function describeAlert(alert: AlertItem): string {
+  switch (alert.alert_type) {
+    case 'price':
+    case 'custom':
+      return `${alert.condition ?? ''} ${alert.target_value ?? ''}`;
+    case 'percentage_change':
+      return `±${alert.target_value}% move`;
+    case 'volume_spike':
+      return `${alert.target_value}x avg volume`;
+    case 'crash':
+      return `-${alert.target_value}% drop`;
+    case 'strong_buy_signal':
+    case 'strong_sell_signal':
+      return `SMA ${alert.sma_period} · EMA ${alert.ema_period} · RSI ${alert.rsi_period}`;
+    default:
+      if (alert.sma_period) return `SMA(${alert.sma_period})`;
+      if (alert.ema_period) return `EMA(${alert.ema_period})`;
+      if (alert.rsi_period) return `RSI(${alert.rsi_period})`;
+      return '';
+  }
+}
 
 function alertTypeBadgeClass(type: string) {
   switch (type) {
@@ -50,7 +105,15 @@ export default function AlertsPage() {
   const [alertType, setAlertType] = useState<AlertType>('price');
   const [condition, setCondition] = useState('>');
   const [target, setTarget] = useState('');
+  const [indicatorType, setIndicatorType] = useState(INDICATOR_TYPES[0].value);
+  const [period, setPeriod] = useState(INDICATOR_TYPES[0].defaultPeriod);
+  const [combinedType, setCombinedType] = useState(COMBINED_TYPES[0].value);
+  const [smaPeriod, setSmaPeriod] = useState('50');
+  const [emaPeriod, setEmaPeriod] = useState('20');
+  const [rsiPeriod, setRsiPeriod] = useState('14');
   const [formError, setFormError] = useState('');
+
+  const selectedIndicator = INDICATOR_TYPES.find((t) => t.value === indicatorType) ?? INDICATOR_TYPES[0];
   const [formLoading, setFormLoading] = useState(false);
 
   async function loadAlerts() {
@@ -72,19 +135,14 @@ export default function AlertsPage() {
   // Validate form based on alert type
   function isFormValid() {
     if (!symbol.trim()) return false;
-    if (alertType === 'price') {
-      return target !== '' && !isNaN(Number(target));
+    if (alertType === 'indicator') {
+      return isValidPeriod(period, selectedIndicator.period);
     }
-    if (alertType === 'percentage_change') {
-      return target !== '' && !isNaN(Number(target));
+    if (alertType === 'combined') {
+      return isValidPeriod(smaPeriod, 'sma_period') && isValidPeriod(emaPeriod, 'ema_period') && isValidPeriod(rsiPeriod, 'rsi_period');
     }
-    if (alertType === 'volume_spike') {
-      return target !== '' && !isNaN(Number(target));
-    }
-    if (alertType === 'crash') {
-      return target !== '' && !isNaN(Number(target));
-    }
-    return true;
+    // price, custom, percentage_change, volume_spike, crash: a positive threshold
+    return isPositiveNumber(target);
   }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -100,19 +158,32 @@ export default function AlertsPage() {
       const payload: Parameters<typeof alertService.create>[0] = {
         stock_symbol: (symbol || "").toUpperCase(),
         alert_type: alertType,
-        target_value: Number(target),
       };
-      
-      // Add condition only for price alerts
-      if (alertType === 'price') {
-        payload.condition = condition;
+
+      if (alertType === 'indicator') {
+        // Indicator alerts are defined by their period only (no price target)
+        payload.alert_type = selectedIndicator.value;
+        payload[selectedIndicator.period] = Number(period);
+      } else if (alertType === 'combined') {
+        payload.alert_type = combinedType;
+        payload.sma_period = Number(smaPeriod);
+        payload.ema_period = Number(emaPeriod);
+        payload.rsi_period = Number(rsiPeriod);
+      } else {
+        payload.target_value = Number(target);
+        // Only price and custom rules use a comparison condition
+        if (alertType === 'price' || alertType === 'custom') {
+          payload.condition = condition;
+        }
       }
-      
+
       await alertService.create(payload);
       setSymbol('');
       setTarget('');
       setAlertType('price');
       setCondition('>');
+      setIndicatorType(INDICATOR_TYPES[0].value);
+      setPeriod(INDICATOR_TYPES[0].defaultPeriod);
       await loadAlerts();
     } catch (err) {
       setFormError(getErrorMessage(err));
@@ -177,8 +248,8 @@ export default function AlertsPage() {
                 </div>
               </div>
 
-              {/* Condition + Target — for price type */}
-              {alertType === 'price' && (
+              {/* Condition + Target — for price and custom rules */}
+              {(alertType === 'price' || alertType === 'custom') && (
                 <div className="flex gap-3 overflow-hidden">
                   <select
                     value={condition}
@@ -238,6 +309,70 @@ export default function AlertsPage() {
                 />
               )}
 
+              {/* Indicator rule + period (no price target) */}
+              {alertType === 'indicator' && (
+                <div className="space-y-3">
+                  <select
+                    value={indicatorType}
+                    onChange={(e) => {
+                      const next = INDICATOR_TYPES.find((t) => t.value === e.target.value) ?? INDICATOR_TYPES[0];
+                      if (next.period !== selectedIndicator.period) setPeriod(next.defaultPeriod);
+                      setIndicatorType(next.value);
+                    }}
+                    className="w-full rounded-xl bg-[var(--surface-lowest)] px-3 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-[var(--primary)]/40"
+                  >
+                    {INDICATOR_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={period}
+                    onChange={(e) => setPeriod(e.target.value)}
+                    className="w-full rounded-xl bg-[var(--surface-lowest)] px-4 py-3 text-sm text-white outline-none placeholder:text-[var(--on-surface-variant)] focus:ring-2 focus:ring-[var(--primary)]/40"
+                    placeholder={`${selectedIndicator.period.split('_')[0].toUpperCase()} period in days (2-${PERIOD_LIMITS[selectedIndicator.period]})`}
+                    type="number"
+                    step="1"
+                    min="2"
+                    max={PERIOD_LIMITS[selectedIndicator.period]}
+                  />
+                </div>
+              )}
+
+              {/* Combined signal: all three periods */}
+              {alertType === 'combined' && (
+                <div className="space-y-3">
+                  <select
+                    value={combinedType}
+                    onChange={(e) => setCombinedType(e.target.value)}
+                    className="w-full rounded-xl bg-[var(--surface-lowest)] px-3 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-[var(--primary)]/40"
+                  >
+                    {COMBINED_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      ['SMA', smaPeriod, setSmaPeriod, 'sma_period'],
+                      ['EMA', emaPeriod, setEmaPeriod, 'ema_period'],
+                      ['RSI', rsiPeriod, setRsiPeriod, 'rsi_period'],
+                    ] as const).map(([label, value, setValue, field]) => (
+                      <input
+                        key={field}
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        aria-label={`${label} period`}
+                        className="min-w-0 rounded-xl bg-[var(--surface-lowest)] px-3 py-3 text-sm text-white outline-none placeholder:text-[var(--on-surface-variant)] focus:ring-2 focus:ring-[var(--primary)]/40"
+                        placeholder={`${label} period`}
+                        type="number"
+                        step="1"
+                        min="2"
+                        max={PERIOD_LIMITS[field]}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {formError && <p className="text-xs text-tertiary">{formError}</p>}
 
               <button
@@ -273,12 +408,15 @@ export default function AlertsPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-white">{alert.stock_symbol}</p>
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.15em] ${alertTypeBadgeClass(alert.alert_type)}`}>
-                            {alert.alert_type.replace('_', ' ')}
+                            {alert.alert_type.split('_').join(' ')}
                           </span>
                         </div>
                         <p className="text-xs text-[var(--on-surface-variant)]">
-                          {alert.condition ? `${alert.condition} ${alert.target_value} • ` : ''}
+                          {describeAlert(alert) ? `${describeAlert(alert)} • ` : ''}
                           {formatDateLabel(alert.created_at)}
+                          {!alert.is_active && alert.is_triggered && alert.triggered_at
+                            ? ` • Fired ${formatDateLabel(alert.triggered_at)}`
+                            : ''}
                         </p>
                       </div>
                     </div>
@@ -291,7 +429,7 @@ export default function AlertsPage() {
                             : 'rounded-full bg-[var(--surface-high)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--on-surface-variant)] hover:bg-[var(--surface-highest)] transition-colors'
                         }
                       >
-                        {alert.is_active ? 'Live' : 'Paused'}
+                        {alert.is_active ? 'Live' : alert.is_triggered ? 'Re-arm' : 'Paused'}
                       </button>
                       <button
                         onClick={() => deleteAlert(alert.id)}

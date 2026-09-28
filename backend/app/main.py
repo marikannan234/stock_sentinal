@@ -9,6 +9,7 @@ Features:
   - Database initialization
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -24,6 +25,7 @@ from app.core.error_handlers import setup_middleware, setup_exception_handlers
 
 # Import scheduler
 from app.services.scheduler import start_scheduler, stop_scheduler
+from app.core.event_loop import clear_main_loop, set_main_loop
 
 # Then import routes
 from app.api.routes import auth as auth_routes
@@ -80,6 +82,9 @@ async def lifespan(app: FastAPI):
     # Instead, always use: alembic upgrade head
     # For development: Alembic migrations are automatically applied
     
+    # Let background threads (the alert scheduler) run coroutines on this loop.
+    set_main_loop(asyncio.get_running_loop())
+
     # Start background scheduler for alert checking
     try:
         start_scheduler()
@@ -107,11 +112,14 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info(f"Shutting down {settings.APP_NAME}")
     
-    # Stop background scheduler
+    # Stop background scheduler. Waits for a running alert check to finish; run
+    # in a thread so this loop stays free for any coroutine that check awaits.
     try:
-        stop_scheduler()
+        await asyncio.to_thread(stop_scheduler, True)
     except Exception as e:
         logger.error(f"Error stopping scheduler: {e}")
+    finally:
+        clear_main_loop()
 
 
 # ============================================

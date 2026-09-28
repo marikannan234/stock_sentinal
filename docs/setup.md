@@ -32,7 +32,7 @@ Optional:
 | `MAIL_SERVER`, `MAIL_PORT`, `MAIL_STARTTLS` | `smtp.gmail.com`, `587`, `true` |
 | `ENABLE_EMAIL_NOTIFICATIONS` | `true` |
 | `ENABLE_WHATSAPP_NOTIFICATIONS` | `false`. If `true`, also set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_WHATSAPP_NUMBER`. |
-| `ALERT_COOLDOWN_MINUTES`, `ALERT_DEV_MODE`, `ALERT_LOG_COOLDOWN_CHECKS` | `10`, `false`, `true` |
+| `ALERT_COOLDOWN_MINUTES`, `ALERT_DEV_MODE`, `ALERT_LOG_COOLDOWN_CHECKS` | Deprecated; ignored. Alerts are one-shot, see [architecture](architecture.md#alerts-servicesalerts). |
 
 `BACKEND_CORS_ORIGINS` is parsed but not used yet. CORS origins are hardcoded in `app/main.py`; see [architecture](architecture.md#known-issues).
 
@@ -92,7 +92,7 @@ alembic downgrade -1                            # roll back one revision
 
 In Docker, run them in the backend container, for example `docker exec stocksentinel-backend alembic current`.
 
-The chain is `0001` → `0002` → `0003` → `0004` → `0005` → `0006_trading_cash_numeric`.
+The chain is `0001` → … → `0006_trading_cash_numeric` → `0007_alert_type_parameters`.
 
 `alembic check` currently reports differences between the models and the migrations, mainly in the unused `stocks` and `stock_predictions` tables and in enum/varchar types. A dedicated alignment migration is still to do.
 

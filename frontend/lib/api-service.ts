@@ -50,6 +50,7 @@ export function getErrorMessage(error: unknown, fallback = 'Something went wrong
   if (Array.isArray(detail)) {
     return detail
       .map((item) => (typeof item === 'object' && item && 'msg' in item ? String((item as { msg?: string }).msg) : String(item)))
+      .map((message) => message.replace(/^Value error, /, ''))
       .join(', ');
   }
   if (typeof detail === 'string') {

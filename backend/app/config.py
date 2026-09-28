@@ -71,10 +71,12 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str | None = None
     TWILIO_WHATSAPP_NUMBER: str | None = None  # e.g., "+14155238886"
 
-    # Alert Configuration
-    ALERT_COOLDOWN_MINUTES: int = 10  # Minutes between duplicate alert sends
-    ALERT_DEV_MODE: bool = False  # Skip cooldown for testing (set to True locally)
-    ALERT_LOG_COOLDOWN_CHECKS: bool = True  # Log when cooldown is active (verbose)
+    # Deprecated, no effect: alerts are one-shot (they deactivate when they
+    # fire and are re-armed by re-enabling them), so there is no cooldown.
+    # Kept so existing .env files that still set these keep loading.
+    ALERT_COOLDOWN_MINUTES: int = 10
+    ALERT_DEV_MODE: bool = False
+    ALERT_LOG_COOLDOWN_CHECKS: bool = True
 
     class Config:
         env_file = ".env"

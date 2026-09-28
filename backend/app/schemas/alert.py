@@ -1,259 +1,170 @@
 """
 Pydantic schemas for Alert endpoints.
 
-Provides request/response models with validation.
+Validation is type-specific. Each alert type requires exactly the parameters it
+is evaluated with (see the requirement sets in app.models.alert, which also
+drive the database CHECK constraint). Parameters a type does not use are
+ignored and stored as NULL, so existing clients that always send e.g.
+`target_value` keep working.
+
+| alert_type                              | required                                   |
+|-----------------------------------------|--------------------------------------------|
+| price, custom                           | condition (>, <, >=, <=), target_value > 0 |
+| percentage_change                       | target_value: percent move, 0 < x <= 1000  |
+| crash                                   | target_value: percent drop, 0 < x < 100    |
+| volume_spike                            | target_value: volume multiple, x >= 1      |
+| sma_above / sma_below / sma_crossover   | sma_period 2-500                           |
+| ema_above / ema_below / ema_crossover   | ema_period 2-500                           |
+| rsi_overbought / rsi_oversold / rsi_crossover | rsi_period 2-100                     |
+| strong_buy_signal / strong_sell_signal  | sma_period, ema_period, rsi_period         |
 """
 
+import math
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.alert import AlertCondition, AlertType
+from app.models.alert import (
+    EMA_TYPES,
+    PRICE_COMPARISON_CONDITIONS,
+    PRICE_RULE_TYPES,
+    RSI_TYPES,
+    SMA_TYPES,
+    THRESHOLD_TYPES,
+    AlertCondition,
+    AlertType,
+)
+
+MAX_SMA_PERIOD = 500
+MAX_EMA_PERIOD = 500
+MAX_RSI_PERIOD = 100
 
 
-class AlertBase(BaseModel):
-    """Base alert schema - Pydantic v2 with proper optional field handling."""
-    
-    # Configuration for Pydantic v2
-    model_config = ConfigDict(
-        str_strip_whitespace=True,
-    )
-    
+def _parse_enum(enum_class, value, field_name: str):
+    """Accept enum members or their values, case-insensitively."""
+    if value is None or isinstance(value, enum_class):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        for member in enum_class:
+            if member.value.lower() == text.lower():
+                return member
+    valid = ", ".join(member.value for member in enum_class)
+    raise ValueError(f"Invalid {field_name} {value!r}. Must be one of: {valid}")
+
+
+class CreateAlertRequest(BaseModel):
+    """
+    Request schema for creating an alert.
+
+    Examples:
+        {"stock_symbol": "AAPL", "alert_type": "price", "condition": ">", "target_value": 150.5}
+        {"stock_symbol": "AAPL", "alert_type": "sma_crossover", "sma_period": 50}
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     stock_symbol: str = Field(..., min_length=1, max_length=16, description="Stock ticker symbol (e.g., AAPL)")
-    # PYDANTIC V2 FIX: Simple Optional with default None - no field_validator to avoid required flag
-    condition: Optional[AlertCondition] = None
-    target_value: Optional[float] = Field(default=None, gt=0, description="Target value (price or multiplier depending on alert type)")
-    alert_type: AlertType = Field(default=AlertType.PRICE, description="Type of alert (price, percentage_change, volume_spike, crash, sma_above, sma_below, sma_crossover, ema_above, ema_below, ema_crossover, rsi_overbought, rsi_oversold, rsi_crossover, strong_buy_signal, strong_sell_signal, custom)")
-    sma_period: Optional[int] = Field(
-        default=None,
-        ge=2,
-        le=500,
-        description="SMA period in days for SMA-based alerts (must be 2-500, required for sma_above/sma_below/sma_crossover and combined signals)"
-    )
-    ema_period: Optional[int] = Field(
-        default=None,
-        ge=2,
-        le=500,
-        description="EMA period in days for EMA-based alerts (must be 2-500, required for ema_above/ema_below/ema_crossover and combined signals)"
-    )
-    rsi_period: Optional[int] = Field(
-        default=None,
-        ge=2,
-        le=100,
-        description="RSI period in days for RSI-based alerts (must be 2-100, required for rsi_overbought/rsi_oversold/rsi_crossover and combined signals)"
-    )
-    
+    alert_type: AlertType = Field(default=AlertType.PRICE, description="Alert type (see module docstring)")
+    condition: Optional[AlertCondition] = Field(default=None, description="Price comparison for price/custom alerts")
+    target_value: Optional[float] = Field(default=None, gt=0, description="Threshold; meaning depends on alert_type")
+    sma_period: Optional[int] = Field(default=None, ge=2, le=MAX_SMA_PERIOD, description="SMA period in trading days")
+    ema_period: Optional[int] = Field(default=None, ge=2, le=MAX_EMA_PERIOD, description="EMA period in trading days")
+    rsi_period: Optional[int] = Field(default=None, ge=2, le=MAX_RSI_PERIOD, description="RSI period in trading days")
+
     @field_validator("stock_symbol", mode="before")
     @classmethod
-    def validate_stock_symbol(cls, v: str) -> str:
-        """Ensure stock symbol is uppercase."""
-        if not isinstance(v, str):
+    def _normalize_symbol(cls, value):
+        if not isinstance(value, str):
             raise ValueError("stock_symbol must be a string")
-        v = v.strip().upper()
-        if not v:
+        value = value.strip().upper()
+        if not value:
             raise ValueError("stock_symbol cannot be empty")
-        return v
-    
-    @field_validator("target_value", mode="before")
-    @classmethod
-    def validate_target_value(cls, v: float) -> float:
-        """Ensure target value is positive."""
-        if not isinstance(v, (int, float)):
-            raise ValueError("target_value must be a number")
-        if v <= 0:
-            raise ValueError("target_value must be greater than 0")
-        return float(v)
-    
+        return value
+
     @field_validator("alert_type", mode="before")
     @classmethod
-    def validate_alert_type(cls, v):
-        """Normalize alert_type enum value (case-insensitive)."""
-        if isinstance(v, AlertType):
-            return v
-        if isinstance(v, str):
-            v = v.strip()
-            # Try exact match first
-            try:
-                return AlertType(v)
-            except ValueError:
-                pass
-            # Try case-insensitive match
-            for alert_type in AlertType:
-                if alert_type.value.lower() == v.lower():
-                    return alert_type
-            # Provide helpful error message
-            valid_values = [t.value for t in AlertType]
-            raise ValueError(f"Invalid alert_type '{v}'. Must be one of: {', '.join(valid_values)}")
-        if v is None:
-            return AlertType.PRICE
-        raise ValueError(f"alert_type must be a string or null, got {type(v).__name__}")
-    
+    def _parse_alert_type(cls, value):
+        return AlertType.PRICE if value is None else _parse_enum(AlertType, value, "alert_type")
+
+    @field_validator("condition", mode="before")
+    @classmethod
+    def _parse_condition(cls, value):
+        return _parse_enum(AlertCondition, value, "condition")
+
+    @field_validator("target_value")
+    @classmethod
+    def _finite_target(cls, value):
+        if value is not None and not math.isfinite(value):
+            raise ValueError("target_value must be a finite number")
+        return value
+
     @model_validator(mode="after")
-    def validate_condition_requirement_and_normalize(self):
-        """
-        Normalize and validate condition:
-        1. Convert string condition to AlertCondition enum if needed
-        2. Require condition only for PRICE alerts
-        3. Validate SMA alert requirements (sma_period must be provided)
-        """
-        # Normalize condition from string to enum if needed
-        if isinstance(self.condition, str):
-            v = self.condition.strip()
-            # Try exact match first
-            try:
-                condition = AlertCondition(v)
-            except ValueError:
-                # Try case-insensitive match
-                found = False
-                condition = None
-                for cond in AlertCondition:
-                    if cond.value.lower() == v.lower():
-                        condition = cond
-                        found = True
-                        break
-                if not found:
-                    valid_values = [c.value for c in AlertCondition]
-                    raise ValueError(f"Invalid condition '{v}'. Must be one of: {', '.join(valid_values)}")
-            # Use object.__setattr__ to bypass validation
-            object.__setattr__(self, 'condition', condition)
-        
-        # PRICE alerts MUST have a condition
-        if self.alert_type == AlertType.PRICE and self.condition is None:
-            raise ValueError("'condition' field is REQUIRED for PRICE alerts (must be one of: >, <, >=, <=)")
-        
-        # SMA alerts MUST have sma_period
-        sma_alert_types = [AlertType.SMA_ABOVE, AlertType.SMA_BELOW, AlertType.SMA_CROSSOVER]
-        if self.alert_type in sma_alert_types:
-            if self.sma_period is None:
-                raise ValueError(f"'sma_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-500)")
-            # SMA alerts should not use condition
-            if self.condition is not None:
-                object.__setattr__(self, 'condition', None)
-            # SMA alerts should not use target_value
-            if self.target_value is not None:
-                object.__setattr__(self, 'target_value', None)
-        else:
-            # Non-SMA alerts should not have sma_period
-            if self.sma_period is not None:
-                object.__setattr__(self, 'sma_period', None)
-        
-        # EMA alerts MUST have ema_period
-        ema_alert_types = [AlertType.EMA_ABOVE, AlertType.EMA_BELOW, AlertType.EMA_CROSSOVER]
-        if self.alert_type in ema_alert_types:
-            if self.ema_period is None:
-                raise ValueError(f"'ema_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-500)")
-            # EMA alerts should not use condition
-            if self.condition is not None:
-                object.__setattr__(self, 'condition', None)
-            # EMA alerts should not use target_value
-            if self.target_value is not None:
-                object.__setattr__(self, 'target_value', None)
-        else:
-            # Non-EMA alerts should not have ema_period (unless combined signal)
-            if self.ema_period is not None and self.alert_type not in [AlertType.STRONG_BUY_SIGNAL, AlertType.STRONG_SELL_SIGNAL]:
-                object.__setattr__(self, 'ema_period', None)
-        
-        # RSI alerts MUST have rsi_period
-        rsi_alert_types = [AlertType.RSI_OVERBOUGHT, AlertType.RSI_OVERSOLD, AlertType.RSI_CROSSOVER]
-        if self.alert_type in rsi_alert_types:
-            if self.rsi_period is None:
-                raise ValueError(f"'rsi_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-100)")
-            # RSI alerts should not use condition
-            if self.condition is not None:
-                object.__setattr__(self, 'condition', None)
-            # RSI alerts should not use target_value
-            if self.target_value is not None:
-                object.__setattr__(self, 'target_value', None)
-        else:
-            # Non-RSI alerts should not have rsi_period (unless combined signal)
-            if self.rsi_period is not None and self.alert_type not in [AlertType.STRONG_BUY_SIGNAL, AlertType.STRONG_SELL_SIGNAL]:
-                object.__setattr__(self, 'rsi_period', None)
-        
-        # Combined signal alerts MUST have all three periods (sma_period, ema_period, rsi_period)
-        combined_alert_types = [AlertType.STRONG_BUY_SIGNAL, AlertType.STRONG_SELL_SIGNAL]
-        if self.alert_type in combined_alert_types:
-            if self.sma_period is None:
-                raise ValueError(f"'sma_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-500)")
-            if self.ema_period is None:
-                raise ValueError(f"'ema_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-500)")
-            if self.rsi_period is None:
-                raise ValueError(f"'rsi_period' field is REQUIRED for {self.alert_type.value} alerts (must be 2-100)")
-            # Combined alerts should not use condition
-            if self.condition is not None:
-                object.__setattr__(self, 'condition', None)
-            # Combined alerts should not use target_value
-            if self.target_value is not None:
-                object.__setattr__(self, 'target_value', None)
-        
-        # Other alert types don't need condition (it's optional)
-        # PERCENTAGE_CHANGE: uses percentage value in target_value
-        # VOLUME_SPIKE: no condition needed (automatic detection)
-        # CRASH: no condition needed (automatic detection)
-        # CUSTOM: condition is optional (user-defined)
-        
+    def _validate_for_alert_type(self) -> "CreateAlertRequest":
+        alert_type = self.alert_type
+        label = alert_type.value
+
+        # Drop parameters this alert type does not use.
+        if alert_type not in PRICE_RULE_TYPES:
+            self.condition = None
+        if alert_type not in THRESHOLD_TYPES:
+            self.target_value = None
+        if alert_type not in SMA_TYPES:
+            self.sma_period = None
+        if alert_type not in EMA_TYPES:
+            self.ema_period = None
+        if alert_type not in RSI_TYPES:
+            self.rsi_period = None
+
+        if alert_type in PRICE_RULE_TYPES:
+            if self.condition is None:
+                raise ValueError(f"'condition' is required for {label} alerts (one of >, <, >=, <=)")
+            if self.condition not in PRICE_COMPARISON_CONDITIONS:
+                raise ValueError(f"'condition' for {label} alerts must be one of >, <, >=, <=")
+
+        if alert_type in THRESHOLD_TYPES and self.target_value is None:
+            raise ValueError(f"'target_value' is required for {label} alerts")
+        if alert_type == AlertType.PERCENTAGE_CHANGE and self.target_value > 1000:
+            raise ValueError("'target_value' for percentage_change is a percent and must be at most 1000")
+        if alert_type == AlertType.CRASH and self.target_value >= 100:
+            raise ValueError("'target_value' for crash is a percent drop and must be below 100")
+        if alert_type == AlertType.VOLUME_SPIKE and self.target_value < 1:
+            raise ValueError("'target_value' for volume_spike is a multiple of average volume and must be at least 1")
+
+        for field, types, maximum in (
+            ("sma_period", SMA_TYPES, MAX_SMA_PERIOD),
+            ("ema_period", EMA_TYPES, MAX_EMA_PERIOD),
+            ("rsi_period", RSI_TYPES, MAX_RSI_PERIOD),
+        ):
+            if alert_type in types and getattr(self, field) is None:
+                raise ValueError(f"'{field}' is required for {label} alerts (2-{maximum})")
+
         return self
 
 
-class CreateAlertRequest(AlertBase):
-    """
-    Request schema for creating a new alert.
-    
-    Example:
-        {
-            "stock_symbol": "AAPL",
-            "condition": ">",
-            "target_value": 150.50
-        }
-    """
-    pass
-
-
 class UpdateAlertRequest(BaseModel):
-    """
-    Request schema for updating an alert.
-    
-    Only supports toggling active status.
-    """
-    
+    """Enable or disable an alert. Re-enabling a fired alert re-arms it."""
+
     is_active: bool = Field(..., description="Whether the alert is active")
 
 
-class AlertResponse(AlertBase):
-    """
-    Response schema for alert data.
-    
-    Includes all alert fields with metadata.
-    """
-    
+class AlertResponse(BaseModel):
+    """Alert as returned by the API. Not re-validated against creation rules."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: int = Field(..., description="Alert unique identifier")
     user_id: int = Field(..., description="User ID who owns this alert")
-    is_active: bool = Field(..., description="Whether alert is currently active")
+    stock_symbol: str
+    alert_type: AlertType
+    condition: Optional[AlertCondition] = None
+    target_value: Optional[float] = None
+    sma_period: Optional[int] = None
+    ema_period: Optional[int] = None
+    rsi_period: Optional[int] = None
+    is_active: bool = Field(..., description="Whether the alert is being checked")
+    is_triggered: bool = Field(False, description="Whether the alert has fired (alerts fire once, then deactivate)")
     created_at: datetime = Field(..., description="When the alert was created")
-    triggered_at: Optional[datetime] = Field(None, description="When the alert was last triggered (if any)")
-    last_price: Optional[float] = Field(None, description="Last recorded price (used for percentage change and SMA crossover tracking)")
-    
-    class Config:
-        from_attributes = True
-        use_enum_values = False  # Keep enum objects, don't convert to strings
-    
-    def __repr__(self) -> str:
-        return f"<AlertResponse(id={self.id}, symbol={self.stock_symbol}, condition={self.condition}, value={self.target_value}, active={self.is_active})>"
-
-
-class AlertTriggeredResponse(BaseModel):
-    """
-    Response schema when an alert is triggered.
-    
-    Includes alert info and the price that triggered it.
-    """
-    
-    alert_id: int = Field(..., description="ID of the triggered alert")
-    stock_symbol: str = Field(..., description="Stock symbol")
-    current_price: float = Field(..., description="Current stock price")
-    condition: AlertCondition = Field(..., description="Condition that was met")
-    target_value: float = Field(..., description="Target value from alert")
-    triggered_at: datetime = Field(..., description="When the alert was triggered")
-    
-    class Config:
-        from_attributes = True
+    triggered_at: Optional[datetime] = Field(None, description="When the alert last fired")
+    last_price: Optional[float] = Field(None, description="Reference price (percent/crash) or previous price (crossovers)")

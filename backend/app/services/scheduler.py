@@ -61,9 +61,14 @@ def start_scheduler() -> None:
         raise RuntimeError(f"Scheduler failed to start: {e}") from e
 
 
-def stop_scheduler() -> None:
+def stop_scheduler(wait: bool = True) -> None:
     """
     Stop the background scheduler gracefully.
+    
+    With wait=True (default) an alert run in progress finishes first, so no
+    half-finished run or pending notification is left behind. Call it from a
+    worker thread when inside the event loop (see app.main lifespan), because
+    the running job may itself be waiting on the loop.
     
     Safe to call multiple times - stopping an already-stopped scheduler is idempotent.
     """
@@ -71,7 +76,7 @@ def stop_scheduler() -> None:
     
     try:
         if _scheduler is not None and _scheduler.running:
-            _scheduler.shutdown(wait=False)
+            _scheduler.shutdown(wait=wait)
             logger.info("✅ Background scheduler stopped")
         else:
             logger.debug("Scheduler not running, nothing to stop")

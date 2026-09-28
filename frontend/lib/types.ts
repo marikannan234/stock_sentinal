@@ -182,6 +182,7 @@ export type AlertItem = {
   ema_period?: number | null;
   rsi_period?: number | null;
   is_active: boolean;
+  is_triggered?: boolean;
   created_at: string;
   triggered_at?: string | null;
   last_price?: number | null;

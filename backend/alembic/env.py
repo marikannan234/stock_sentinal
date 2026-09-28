@@ -15,7 +15,9 @@ import app.models  # noqa: E402,F401
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep loggers that already exist (e.g. when migrations run in-process in
+    # tests); the default would silently disable every app.* logger.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 
 database_url = os.getenv("DATABASE_URL", settings.DATABASE_URL)
