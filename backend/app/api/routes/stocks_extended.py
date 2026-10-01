@@ -49,14 +49,6 @@ TOP_MOVERS_CACHE_TTL_SECONDS = 10   # Market snapshot: 10 seconds
 STOCK_PRICE_CACHE_TTL_SECONDS = 5   # Individual prices: 5 seconds MAX
 MARKET_SUMMARY_CACHE_TTL_SECONDS = 10  # Market summary: 10 seconds
 
-FALLBACK_MARKET_QUOTES = (
-    {"symbol": "AAPL", "price": 190.0, "change": 2.28, "change_percent": 1.2, "high": 191.4, "low": 188.9, "volume": 52000000},
-    {"symbol": "MSFT", "price": 410.0, "change": 3.28, "change_percent": 0.8, "high": 412.2, "low": 407.4, "volume": 28000000},
-    {"symbol": "NVDA", "price": 875.0, "change": 10.5, "change_percent": 1.21, "high": 882.0, "low": 866.5, "volume": 47000000},
-    {"symbol": "META", "price": 485.0, "change": 2.18, "change_percent": 0.45, "high": 488.4, "low": 481.6, "volume": 21000000},
-    {"symbol": "TSLA", "price": 180.0, "change": -2.74, "change_percent": -1.5, "high": 183.0, "low": 178.1, "volume": 65000000},
-    {"symbol": "AMZN", "price": 178.0, "change": -1.24, "change_percent": -0.69, "high": 179.5, "low": 176.2, "volume": 33000000},
-)
 
 # ============================================================================
 # CACHE STRUCTURES WITH TTL
@@ -75,6 +67,10 @@ top_movers_cache = {
     "timestamp": 0.0,
 }
 _top_movers_cache_lock = threading.Lock()
+# One snapshot refresh at a time: requests that arrive together (the dashboard
+# asks for ribbon and market at once) wait and reuse the fresh snapshot instead
+# of each starting a 20-symbol download.
+_snapshot_refresh_lock = threading.Lock()
 
 # Per-stock price cache (5 sec TTL)
 _stock_price_cache: Dict[str, _CacheEntry] = {}
@@ -131,26 +127,23 @@ def _cache_market_summary(summary: MarketSummary) -> None:
     logger.debug("Cached market summary")
 
 
-def _get_fallback_market_quotes() -> List[StockQuote]:
-    timestamp = datetime.now(timezone.utc)
-    return [
-        StockQuote(
-            symbol=item["symbol"],
-            price=float(item["price"]),
-            change=float(item["change"]),
-            change_percent=float(item["change_percent"]),
-            high=float(item["high"]),
-            low=float(item["low"]),
-            volume=int(item["volume"]),
-            timestamp=timestamp,
-        )
-        for item in FALLBACK_MARKET_QUOTES
-    ]
-
-
 def _run_silenced_yfinance(request_fn):
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         return request_fn()
+
+
+# yf.download() is not thread-safe: it builds its result from module-level
+# state (yfinance.shared._DFS), which every call resets and refills. Two
+# overlapping calls can therefore return each other's data (NVDA priced with
+# GOOGL's close). Every yf.download() in this process goes through this lock.
+# Single-symbol quotes use Ticker.history() instead, which returns its own
+# DataFrame and never reads that shared state, so they need no lock.
+_YF_DOWNLOAD_LOCK = threading.Lock()
+
+
+def _yf_download(**kwargs):
+    with _YF_DOWNLOAD_LOCK:
+        return _run_silenced_yfinance(lambda: yf.download(**kwargs))
 
 
 def _fetch_market_quotes_batch(symbols: List[str]) -> List[StockQuote]:
@@ -161,17 +154,18 @@ def _fetch_market_quotes_batch(symbols: List[str]) -> List[StockQuote]:
     try:
         # Use ThreadPoolExecutor to ENFORCE hard 2-second timeout
         def _fetch():
-            return _run_silenced_yfinance(
-                lambda: yf.download(
-                    tickers=" ".join(symbols),
-                    period="2d",
-                    interval="1d",
-                    auto_adjust=False,
-                    progress=False,
-                    threads=False,
-                    group_by="ticker",
-                    timeout=2,  # Max 2 seconds
-                )
+            return _yf_download(
+                tickers=" ".join(symbols),
+                period="2d",
+                interval="1d",
+                auto_adjust=False,
+                progress=False,
+                # Parallel per-symbol requests inside this one locked call
+                # (~0.5 s for 20 symbols vs ~1-4 s sequentially, which missed
+                # the 2 s limit). Symbols are read back by name below.
+                threads=True,
+                group_by="ticker",
+                timeout=2,  # Max 2 seconds
             )
         
         with ThreadPoolExecutor(max_workers=1) as executor:
@@ -179,7 +173,7 @@ def _fetch_market_quotes_batch(symbols: List[str]) -> List[StockQuote]:
             try:
                 data = future.result(timeout=2)  # Hard timeout at 2 seconds
             except FutureTimeoutError:
-                logger.warning(f"⚠️ Batch fetch TIMEOUT for {len(symbols)} stocks (>2s) - using fallback")
+                logger.warning(f"⚠️ Batch fetch TIMEOUT for {len(symbols)} stocks (>2s) - no live snapshot")
                 return []
     except Exception as e:
         logger.debug(f"Batch market data fetch failed: {str(e)[:100]}")
@@ -236,80 +230,64 @@ def _fetch_market_quotes_batch(symbols: List[str]) -> List[StockQuote]:
     return quotes
 
 
-def _merge_with_fallback_quotes(quotes: List[StockQuote]) -> List[StockQuote]:
-    if len(quotes) >= 5:
-        return quotes
-
-    merged = quotes[:]
-    existing_symbols = {quote.symbol for quote in quotes}
-
-    for fallback_quote in _get_fallback_market_quotes():
-        if fallback_quote.symbol not in existing_symbols:
-            merged.append(fallback_quote)
-            existing_symbols.add(fallback_quote.symbol)
-
-    return merged
-
-
-def _fetch_market_quotes_with_fallback() -> List[StockQuote]:
-    try:
-        quotes = _fetch_market_quotes_batch(TOP_STOCKS)
-        if quotes:
-            return _merge_with_fallback_quotes(quotes)
-    except Exception as e:
-        logger.warning("Market quote fetch failed, using fallback: %s", e)
-
-    return _get_fallback_market_quotes()
-
-
 def _get_market_snapshot_quotes() -> List[StockQuote]:
     """
-    Get market snapshot quotes with AGGRESSIVE caching (10-second TTL).
-    
-    Cache Logic:
-    1. Check cache - if valid, return instantly (<1ms)
-    2. Cache miss/expired - fetch with timeout (max 2 seconds)
-    3. Timeout/error - return cached data (even if stale)
-    4. No cache - return fallback data
+    Market snapshot quotes with a 10-second cache.
+
+    1. Fresh cache: return it.
+    2. Otherwise fetch live quotes (max ~2 s) and cache them.
+    3. Live fetch returned nothing: return the last real snapshot, whose
+       quotes keep their original timestamps, or an empty list.
+    Never returns made-up prices.
     """
+    fresh = _get_fresh_snapshot_from_cache()
+    if fresh is not None:
+        return fresh
+
+    with _snapshot_refresh_lock:
+        # Another request may have refreshed the snapshot while this one waited.
+        fresh = _get_fresh_snapshot_from_cache()
+        if fresh is not None:
+            return fresh
+        return _refresh_market_snapshot()
+
+
+def _get_fresh_snapshot_from_cache() -> Optional[List[StockQuote]]:
     current_time = time.time()
-    start_time = current_time
-    
-    # STEP 1: Check cache (instant return if valid)
     with _top_movers_cache_lock:
-        if (top_movers_cache["data"] is not None and 
+        if (top_movers_cache["data"] is not None and
             current_time - top_movers_cache["timestamp"] < TOP_MOVERS_CACHE_TTL_SECONDS):
             age = current_time - top_movers_cache["timestamp"]
             logger.info(f"✓ Market cache HIT (age: {age:.1f}s) - returning {len(top_movers_cache['data'])} quotes instantly")
             return top_movers_cache["data"]
-    
-    # STEP 2: Cache miss - fetch with timeout protection
+    return None
+
+
+def _refresh_market_snapshot() -> List[StockQuote]:
+    current_time = time.time()
+    start_time = current_time
     logger.debug("Cache miss/expired, fetching fresh market data with 2s timeout...")
-    
     try:
-        quotes = _fetch_market_quotes_with_fallback()
-        
-        # Store in cache
-        with _top_movers_cache_lock:
+        quotes = _fetch_market_quotes_batch(TOP_STOCKS)
+    except Exception as e:
+        logger.error(f"Error fetching market snapshot: {str(e)[:100]}")
+        quotes = []
+
+    with _top_movers_cache_lock:
+        if quotes:
             top_movers_cache["data"] = quotes
             top_movers_cache["timestamp"] = current_time
             fetch_time = (time.time() - start_time) * 1000
             logger.info(f"✓ Market data fetched and cached ({fetch_time:.0f}ms) - {len(quotes)} quotes")
-        
-        return quotes
-    
-    except Exception as e:
-        logger.error(f"Error fetching market snapshot: {str(e)[:100]}")
-        # STEP 3: Return cached data even if expired
-        with _top_movers_cache_lock:
-            if top_movers_cache["data"] is not None:
-                age = current_time - top_movers_cache["timestamp"]
-                logger.warning(f"⚠️ Returning stale cache (age: {age:.1f}s) due to fetch error")
-                return top_movers_cache["data"]
-        
-        # STEP 4: No cache - use fallback
-        logger.warning("⚠️ No cached data available, using fallback data")
-        return _get_fallback_market_quotes()
+            return quotes
+
+        if top_movers_cache["data"] is not None:
+            age = current_time - top_movers_cache["timestamp"]
+            logger.warning(f"⚠️ Live market data unavailable; returning last snapshot (age: {age:.1f}s)")
+            return top_movers_cache["data"]
+
+    logger.warning("⚠️ Live market data unavailable and no earlier snapshot; returning no quotes")
+    return []
 
 
 def _build_stock_mover(quote: StockQuote) -> StockMoverRead:
@@ -323,7 +301,7 @@ def _build_stock_mover(quote: StockQuote) -> StockMoverRead:
 
 
 def _build_market_summary_from_quotes(quotes: List[StockQuote]) -> MarketSummary:
-    snapshot = quotes or _get_fallback_market_quotes()
+    snapshot = quotes
     top_gainers = sorted(snapshot, key=lambda q: q.change_percent, reverse=True)[:10]
     top_losers = sorted(snapshot, key=lambda q: q.change_percent)[:10]
     most_active = sorted(snapshot, key=lambda q: q.volume, reverse=True)[:10]
@@ -373,37 +351,41 @@ def _fetch_finnhub_quote(symbol: str) -> Optional[Dict[str, Any]]:
 def _fetch_yfinance_current_price(symbol: str) -> Optional[float]:
     """
     Fallback: Get latest close price from yfinance with timeout enforcement.
+
+    Uses Ticker(symbol).history(), which returns a DataFrame owned by this call,
+    so concurrent lookups for other symbols cannot leak into it (yf.download
+    shares module-level state and could; see _YF_DOWNLOAD_LOCK).
     """
     try:
         # Use ThreadPoolExecutor with timeout to ENFORCE max 2 seconds
         def _fetch():
-            return _run_silenced_yfinance(
-                lambda: yf.download(
-                    tickers=symbol.upper(),
-                    period="1d",
-                    interval="1d",
-                    auto_adjust=False,
-                    progress=False,
-                    threads=False,
-                    timeout=2,
-                )
+            return yf.Ticker(symbol.upper()).history(
+                period="1d",
+                interval="1d",
+                auto_adjust=False,
+                timeout=2,
             )
         
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_fetch)
             try:
                 data = future.result(timeout=2)
-                if data is not None and hasattr(data, "empty") and not data.empty:
-                    close_value = data.get("Close") if isinstance(data, dict) else (data["Close"] if "Close" in data.columns else None)
-                    # Newer yfinance returns multi-index columns, so "Close" is a
-                    # one-column DataFrame (per ticker) rather than a Series.
-                    if isinstance(close_value, pd.DataFrame):
-                        close_value = close_value.iloc[:, 0].dropna()
-                    if close_value is not None:
-                        price = float(close_value.iloc[-1]) if hasattr(close_value, "iloc") else float(close_value[-1]) if len(close_value) > 0 else None
-                        if price and price > 0:
-                            logger.debug(f"yfinance SUCCESS for {symbol}: ${price}")
-                            return price
+                if data is None or not hasattr(data, "empty") or data.empty or "Close" not in data.columns:
+                    return None
+                closes = data["Close"]
+                # history() returns one symbol's flat columns. Anything else
+                # (several tickers' columns) is ambiguous, so it is rejected
+                # rather than guessing which column is this symbol.
+                if not isinstance(closes, pd.Series):
+                    logger.warning(f"yfinance returned ambiguous price data for {symbol}; ignoring it")
+                    return None
+                closes = closes.dropna()
+                if closes.empty:
+                    return None
+                price = float(closes.iloc[-1])
+                if price > 0:
+                    logger.debug(f"yfinance SUCCESS for {symbol}: ${price}")
+                    return price
                 return None
             except FutureTimeoutError:
                 logger.warning(f"⚠️ yfinance TIMEOUT for {symbol} (>2s)")
@@ -636,21 +618,19 @@ def get_market_summary(db: Session = Depends(get_db_session)) -> MarketSummary:
         logger.info(f"✓ Market summary cache HIT ({fetch_time:.1f}ms)")
         return cached_summary
 
-    # STEP 2: Fetch with timeout protection
+    # STEP 2: Build from the snapshot. With no market data the movers lists are
+    # empty (not cached, so the next request retries) instead of made up.
     try:
         quotes = _get_market_snapshot_quotes()
-        summary = _build_market_summary_from_quotes(quotes)
-        _cache_market_summary(summary)
-        fetch_time = (time.time() - start_time) * 1000
-        logger.info(f"✓ Market summary generated and cached ({fetch_time:.0f}ms)")
-        return summary
     except Exception as e:
-        logger.error(f"Market summary failed ({str(e)[:100]}), using fallback data")
-        summary = _build_market_summary_from_quotes(_get_fallback_market_quotes())
+        logger.error(f"Market summary failed ({str(e)[:100]}); returning empty movers")
+        quotes = []
+    summary = _build_market_summary_from_quotes(quotes)
+    if quotes:
         _cache_market_summary(summary)
-        fetch_time = (time.time() - start_time) * 1000
-        logger.warning(f"⚠️ Returned fallback market summary ({fetch_time:.0f}ms)")
-        return summary
+    fetch_time = (time.time() - start_time) * 1000
+    logger.info(f"✓ Market summary generated ({fetch_time:.0f}ms, {len(quotes)} quotes)")
+    return summary
 
 
 @router.get("/{symbol}", response_model=StockDetailsRead)

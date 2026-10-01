@@ -7,7 +7,7 @@ Each section is isolated so one slow upstream source never blocks the others.
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -16,7 +16,6 @@ from app.api.deps import get_current_user, get_db_session
 from app.api.routes.portfolio import PortfolioSummaryResponse, get_portfolio_summary
 from app.api.routes.stocks_extended import (
     _build_market_summary_from_quotes,
-    _get_fallback_market_quotes,
     get_live_stock_quotes,
     get_market_summary,
 )
@@ -66,17 +65,13 @@ def _fallback_portfolio_summary(current_user: User) -> PortfolioSummaryResponse:
     )
 
 
+# On failure these sections are empty rather than filled with made-up prices.
 def _fallback_live_ribbon() -> LiveStockRibbon:
-    fallback_quotes = _get_fallback_market_quotes()
-    return LiveStockRibbon(
-        stocks=fallback_quotes,
-        total_count=len(fallback_quotes),
-        timestamp=fallback_quotes[0].timestamp,
-    )
+    return LiveStockRibbon(stocks=[], total_count=0, timestamp=datetime.now(timezone.utc))
 
 
 def _fallback_market_summary() -> MarketSummary:
-    return _build_market_summary_from_quotes(_get_fallback_market_quotes())
+    return _build_market_summary_from_quotes([])
 
 
 def _fallback_news(limit: int) -> list[dict]:
