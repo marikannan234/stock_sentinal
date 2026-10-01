@@ -4,15 +4,14 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard } from '@/components/sentinel/primitives';
-import { marketService, supportService } from '@/lib/api-service';
-import type { LiveQuote, SupportTicket } from '@/lib/types';
+import { supportService } from '@/lib/api-service';
+import type { SupportTicket } from '@/lib/types';
 import { formatDateLabel } from '@/lib/sentinel-utils';
 
 export default function SupportPage() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
-  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
 
   async function loadTickets() {
     const data = await supportService.list();
@@ -20,9 +19,7 @@ export default function SupportPage() {
   }
 
   useEffect(() => {
-    Promise.allSettled([loadTickets(), marketService.getLiveRibbon()]).then(([_, ribbonResult]) => {
-      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks.slice(0, 8));
-    });
+    void loadTickets().catch(() => setTickets([]));
   }, []);
 
   const activeTickets = useMemo(() => tickets.filter((ticket) => ticket.status !== 'resolved').length, [tickets]);
@@ -38,7 +35,7 @@ export default function SupportPage() {
 
   return (
     <ProtectedScreen>
-      <SentinelShell title="Help Center" subtitle="Our sentinels are on standby 24/7. Submit a ticket for technical issues, account inquiries, or trading platform support." ribbon={ribbon}>
+      <SentinelShell title="Help Center" subtitle="Our sentinels are on standby 24/7. Submit a ticket for technical issues, account inquiries, or trading platform support.">
         <div className="grid grid-cols-12 gap-6">
           <SurfaceCard className="col-span-12 p-8 lg:col-span-5">
             <h2 className="mb-8 text-2xl font-bold text-white">Open New Ticket</h2>

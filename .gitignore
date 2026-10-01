@@ -4,8 +4,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# Environment / secrets
+# Environment / secrets (only *.example templates are tracked)
 .env
+.env.*
+!.env.example
 
 # Node / Next.js
 node_modules/

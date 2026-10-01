@@ -3,19 +3,18 @@
 /**
  * OptimizedRibbon Component
  * Features:
- * - Gets data from global Zustand store (no props drilling)
- * - No flickering on page changes
+ * - Reads the shared ticker query (cached across page changes, so no flicker)
  * - Smooth animation
  * - Responsive hiding on small screens
  */
 
 import Link from 'next/link';
-import { useMarketStore } from '@/lib/store';
+import { useRibbonQuery } from '@/hooks/queries/use-market';
 import { formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 import { Icon } from '@/components/sentinel/primitives';
 
 export function OptimizedRibbon() {
-  const ribbon = useMarketStore((state) => state.ribbon);
+  const { data: ribbon } = useRibbonQuery();
 
   // Don't render if no data
   if (!ribbon || ribbon.length === 0) {

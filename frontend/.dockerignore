@@ -4,3 +4,7 @@ node_modules
 dev-server.out.log
 dev-server.err.log
 *.log
+
+# Env files: public build values come from --build-arg, never from files.
+.env
+.env.*

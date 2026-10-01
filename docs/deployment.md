@@ -5,7 +5,7 @@
 | Image | Base | Notes |
 |---|---|---|
 | `backend/Dockerfile` | `python:3.11-slim` | Starts with `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000` |
-| `frontend/Dockerfile` | `node:20-alpine`, multi-stage | `NEXT_PUBLIC_API_URL` is a **build argument** that is compiled into the bundle, so set it to the public API origin when you build. |
+| `frontend/Dockerfile` | `node:20-alpine`, multi-stage | `NEXT_PUBLIC_API_URL` (required) and `NEXT_PUBLIC_WS_URL` are **build arguments** compiled into the bundle: pass the public API and WebSocket origins (no `/api` or `/ws` path) with `--build-arg`. The build fails if `NEXT_PUBLIC_API_URL` is missing. |
 
 `docker-compose.yml` runs the stack locally: Postgres 15, backend and frontend. Its database password (`password`) is for development only.
 

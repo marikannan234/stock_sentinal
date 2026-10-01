@@ -1,21 +1,16 @@
 import axios from "axios";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-// Simple request deduplication cache to prevent multiple requests for the same URL
-const requestCache = new Map<string, { timestamp: number; promise: Promise<any> }>();
-const CACHE_TIME_MS = 2000; // Keep cache for 2 seconds to handle rapid tab switches
+import { config as appConfig } from "./config";
 
 export const api = axios.create({
-  baseURL: `${API_URL}/api`,
+  baseURL: appConfig.API_BASE_URL,
   withCredentials: false,
-  timeout: 10000,  // CRITICAL: 10 second timeout to prevent hung requests
+  timeout: appConfig.API_TIMEOUT_MS,
 });
 
 // Ensure all requests have timeout protection
 api.interceptors.request.use((config) => {
   if (!config.timeout) {
-    config.timeout = 10000;  // Default timeout for any request without explicit timeout
+    config.timeout = appConfig.API_TIMEOUT_MS;
   }
   return config;
 });
@@ -60,33 +55,3 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
-
-// Add GET request deduplication for tab focus optimization
-const originalGet = api.get.bind(api);
-api.get = ((url: string, config?: any) => {
-  // Only deduplicate GET requests
-  const cacheKey = `${url}${JSON.stringify(config?.params || {})}`;
-  const cached = requestCache.get(cacheKey);
-  
-  if (cached && Date.now() - cached.timestamp < CACHE_TIME_MS) {
-    // Return cached promise if still fresh (prevents duplicate requests on tab focus)
-    return cached.promise;
-  }
-  
-  // Make new request and cache it
-  const promise = originalGet(url, config);
-  requestCache.set(cacheKey, { timestamp: Date.now(), promise });
-  
-  // Clean up old cache entries
-  if (requestCache.size > 50) {
-    const now = Date.now();
-    for (const [key, value] of requestCache.entries()) {
-      if (now - value.timestamp > CACHE_TIME_MS * 2) {
-        requestCache.delete(key);
-      }
-    }
-  }
-  
-  return promise;
-}) as typeof api.get;
-

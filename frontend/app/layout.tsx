@@ -3,18 +3,18 @@ import type { ReactNode } from 'react';
 import { ToastProvider } from '@/components/ui/toast';
 import { SessionBootstrap } from '@/components/session-bootstrap';
 import { AlertBootstrap } from '@/components/alert-bootstrap';
-import { DataSyncProvider } from '@/components/providers/data-sync-provider';
+import { QueryProvider } from '@/components/providers/query-provider';
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="dark">
       <body className="bg-[var(--surface)] text-[var(--on-surface)] font-sans antialiased">
         <ToastProvider>
-          <DataSyncProvider>
+          <QueryProvider>
             <SessionBootstrap />
             <AlertBootstrap />
             {children}
-          </DataSyncProvider>
+          </QueryProvider>
         </ToastProvider>
       </body>
     </html>

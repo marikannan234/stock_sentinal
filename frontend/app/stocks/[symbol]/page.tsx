@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard, Skeleton } from '@/components/sentinel/primitives';
-import { indicatorService, marketService, newsService } from '@/lib/api-service';
-import type { CombinedIndicators, HistoricalPoint, LiveQuote, NewsWithSentiment, StockDetails } from '@/lib/types';
+import { useStockDetailsQuery, useStockIndicatorsQuery, useStockSentimentQuery } from '@/hooks/queries/use-stock';
+import type { CombinedIndicators, HistoricalPoint } from '@/lib/types';
 import { formatCompactNumber, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
 /* ─── Chart with optional indicator lines (No Flicker) ─── */
@@ -393,39 +393,17 @@ export default function StockDetailPage() {
   const params = useParams<{ symbol: string }>();
   const symbol = (String(params.symbol ?? 'NVDA') || "NVDA").toUpperCase();
 
-  const [details, setDetails] = useState<StockDetails | null>(null);
-  const [sentiment, setSentiment] = useState<NewsWithSentiment | null>(null);
-  const [combined, setCombined] = useState<CombinedIndicators | null>(null);
-  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
   const [timeRange, setTimeRange] = useState<TimeRange>('1y');
   const [chartType, setChartType] = useState<'line' | 'candlestick'>('line');
   const [activeIndicators, setActiveIndicators] = useState<Set<string>>(new Set());
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [error, setError] = useState('');
 
-  // initial load: sentiment, indicators, ribbon
-  useEffect(() => {
-    Promise.allSettled([
-      newsService.withSentiment(symbol, 4),
-      indicatorService.combined(symbol),
-      marketService.getLiveRibbon(),
-    ]).then(([sentimentResult, indicatorsResult, ribbonResult]) => {
-      if (sentimentResult.status === 'fulfilled') setSentiment(sentimentResult.value);
-      if (indicatorsResult.status === 'fulfilled') setCombined(indicatorsResult.value);
-      if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks);
-    });
-  }, [symbol]);
-
-  // re-fetch details whenever symbol or timeRange changes
-  useEffect(() => {
-    setLoadingDetails(true);
-    setError('');
-    marketService
-      .getStockDetails(symbol, timeRange)
-      .then((data) => { setDetails(data); })
-      .catch(() => setError('Failed to load stock data. Please try again.'))
-      .finally(() => setLoadingDetails(false));
-  }, [symbol, timeRange]);
+  // Keyed by symbol (and range), so data from a previous symbol is never shown.
+  const detailsQuery = useStockDetailsQuery(symbol, timeRange);
+  const details = detailsQuery.data;
+  const combined = useStockIndicatorsQuery(symbol).data ?? null;
+  const sentiment = useStockSentimentQuery(symbol).data;
+  const loadingDetails = detailsQuery.isPending;
+  const error = detailsQuery.isError ? 'Failed to load stock data. Please try again.' : '';
 
   function toggleIndicator(name: string) {
     setActiveIndicators((prev) => {
@@ -437,13 +415,13 @@ export default function StockDetailPage() {
 
   return (
     <ProtectedScreen>
-      <SentinelShell ribbon={ribbon}>
+      <SentinelShell>
         {error ? (
           <div className="flex min-h-[40vh] items-center justify-center">
             <div className="text-center">
               <p className="text-lg font-bold text-tertiary">{error}</p>
               <button
-                onClick={() => { setTimeRange('1y'); }}
+                onClick={() => detailsQuery.refetch()}
                 className="mt-4 rounded-xl bg-[var(--surface-high)] px-4 py-2 text-sm text-white"
               >
                 Retry

@@ -1,42 +1,63 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { AllocationDonut, SentinelLineChart } from '@/components/sentinel/charts';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard, Icon } from '@/components/sentinel/primitives';
 import { ErrorBoundary } from '@/components/sentinel/error-boundary';
-import { marketService, portfolioService, getErrorMessage } from '@/lib/api-service';
-import type { LiveQuote, PortfolioAllocationResponse, PortfolioGrowthPoint, PortfolioHolding, PortfolioSummary, SymbolSearchItem } from '@/lib/types';
+import {
+  usePortfolioAllocationQuery,
+  usePortfolioGrowthQuery,
+  usePortfolioHoldingsQuery,
+  usePortfolioSummaryQuery,
+} from '@/hooks/queries/use-portfolio';
+import { useSymbolSearchQuery } from '@/hooks/queries/use-symbol-search';
+import { useBuyMutation } from '@/hooks/queries/use-trades';
+import { getErrorMessage } from '@/lib/api-service';
+import type { SymbolSearchItem } from '@/lib/types';
 import { formatCurrency, formatPercent, exportToCSV } from '@/lib/sentinel-utils';
 
 const ranges: Array<'1d' | '1w' | '1m' | '1y'> = ['1d', '1w', '1m', '1y'];
 
 export default function PortfolioPage() {
-  const [summary, setSummary] = useState<PortfolioSummary | null>(null);
-  const [holdings, setHoldings] = useState<PortfolioHolding[]>([]);
-  const [allocation, setAllocation] = useState<PortfolioAllocationResponse | null>(null);
-  const [growth, setGrowth] = useState<PortfolioGrowthPoint[]>([]);
   const [range, setRange] = useState<'1d' | '1w' | '1m' | '1y'>('1y');
-  const [loadingPortfolio, setLoadingPortfolio] = useState(true);
-  const [loadingGrowth, setLoadingGrowth] = useState(false);
+
+  // Server data; refreshed by the trade mutations (they invalidate ['portfolio']).
+  const summaryQuery = usePortfolioSummaryQuery();
+  const holdingsQuery = usePortfolioHoldingsQuery();
+  const allocationQuery = usePortfolioAllocationQuery();
+  const growthQuery = usePortfolioGrowthQuery(range);
+  const summary = summaryQuery.data;
+  const holdings = useMemo(() => holdingsQuery.data ?? [], [holdingsQuery.data]);
+  const allocation = allocationQuery.data;
+  const growth = growthQuery.data ?? [];
+  const loadingSummary = summaryQuery.isPending;
+  const loadingHoldings = holdingsQuery.isPending;
+  // First load of a range, or a new range loading behind the previous chart.
+  const loadingGrowth = growthQuery.isPending || growthQuery.isPlaceholderData;
+
+  const buyMutation = useBuyMutation();
 
   // Add Holding form state
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Symbol autocomplete state
   const [symbolQuery, setSymbolQuery] = useState('');          // raw text the user types
+  const [debouncedSymbolQuery, setDebouncedSymbolQuery] = useState('');
   const [symbolValidated, setSymbolValidated] = useState('');  // confirmed ticker from a suggestion
   const [symbolName, setSymbolName] = useState('');            // human name of the validated ticker
-  const [symbolSuggestions, setSymbolSuggestions] = useState<SymbolSearchItem[]>([]);
-  const [symbolSearching, setSymbolSearching] = useState(false);
   const [symbolDropdownOpen, setSymbolDropdownOpen] = useState(false);
   const symbolDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const symbolWrapRef = useRef<HTMLDivElement>(null);
 
+  const searchQuery = useSymbolSearchQuery(symbolValidated ? '' : debouncedSymbolQuery);
+  const symbolSuggestions: SymbolSearchItem[] = useMemo(() => (searchQuery.data ?? []).slice(0, 8), [searchQuery.data]);
+  const symbolSearching = searchQuery.isFetching;
+
   const [addQty, setAddQty] = useState('');
-  const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
+  const addLoading = buyMutation.isPending;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -49,167 +70,34 @@ export default function PortfolioPage() {
     return () => document.removeEventListener('mousedown', onDown);
   }, []);
 
-  // Cache for symbol search results to avoid duplicate API calls
-  const searchCacheRef = useRef<Record<string, SymbolSearchItem[]>>({});
-  
-  const searchSymbols = useCallback((q: string) => {
-    if (!q.trim()) { setSymbolSuggestions([]); setSymbolDropdownOpen(false); return; }
-    
-    // Return cached results if available (avoid duplicate API calls)
-    if (searchCacheRef.current[q]) {
-      setSymbolSuggestions(searchCacheRef.current[q]);
-      setSymbolDropdownOpen(true);
-      return;
-    }
-    
-    setSymbolSearching(true);
-    marketService.search(q)
-      .then((results) => {
-        const sliced = results.slice(0, 8);
-        searchCacheRef.current[q] = sliced; // Cache the result
-        setSymbolSuggestions(sliced);
-        setSymbolDropdownOpen(sliced.length > 0);
-      })
-      .catch(() => setSymbolSuggestions([]))
-      .finally(() => setSymbolSearching(false));
-  }, []);
-
   function handleSymbolChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
     setSymbolQuery(val);
     setSymbolValidated('');   // reset validation when user edits freely
     setSymbolName('');
     setAddError('');
+    setSymbolDropdownOpen(true);
     if (symbolDebounce.current) clearTimeout(symbolDebounce.current);
-    symbolDebounce.current = setTimeout(() => searchSymbols(val), 280);
+    symbolDebounce.current = setTimeout(() => setDebouncedSymbolQuery(val), 280);
   }
 
   function handleSymbolSelect(item: SymbolSearchItem) {
     setSymbolQuery(item.ticker);      // show ticker in the input
     setSymbolValidated(item.ticker);  // lock in the validated symbol
     setSymbolName(item.name ?? '');
-    setSymbolSuggestions([]);
     setSymbolDropdownOpen(false);
     setAddError('');
   }
 
   function resetAddForm() {
     setSymbolQuery('');
+    setDebouncedSymbolQuery('');
     setSymbolValidated('');
     setSymbolName('');
-    setSymbolSuggestions([]);
     setSymbolDropdownOpen(false);
     setAddQty('');
     setAddError('');
   }
-
-  // Portfolio data loading once on mount
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadPortfolioData = async () => {
-      if (!isMounted) return;
-
-      try {
-        setLoadingPortfolio(true);
-        const [summaryResult, holdingsResult, allocationResult] = await Promise.all([
-          portfolioService.summary(),
-          portfolioService.list(),
-          portfolioService.allocation(),
-        ]);
-        if (isMounted) {
-          setSummary(summaryResult);
-          setHoldings(holdingsResult);
-          setAllocation(allocationResult);
-        }
-      } catch (error) {
-        if (isMounted) {
-          console.warn('Failed to fetch portfolio:', error);
-        }
-      } finally {
-        if (isMounted) setLoadingPortfolio(false);
-      }
-    };
-
-    // Initial load only
-    void loadPortfolioData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Load growth data on range change with loading state and caching
-  const growthCacheRef = useRef<Record<string, PortfolioGrowthPoint[]>>({});
-  
-  useEffect(() => {
-    async function loadGrowthData() {
-      // Return cached data if available (avoid duplicate API calls)
-      if (growthCacheRef.current[range]) {
-        setGrowth(growthCacheRef.current[range]);
-        return;
-      }
-      
-      setLoadingGrowth(true);
-      try {
-        const result = await portfolioService.growth(range);
-        growthCacheRef.current[range] = result; // Cache result for this range
-        setGrowth(result);
-      } catch {
-        setGrowth([]);
-      } finally {
-        setLoadingGrowth(false);
-      }
-    }
-    loadGrowthData();
-  }, [range]);
-
-  // Listen for trade completion events to refresh portfolio and growth
-  useEffect(() => {
-    const handleTradeCompleted = async () => {
-      // Refresh portfolio on trade
-      try {
-        const [summaryResult, holdingsResult, allocationResult] = await Promise.all([
-          portfolioService.summary(),
-          portfolioService.list(),
-          portfolioService.allocation(),
-        ]);
-        setSummary(summaryResult);
-        setHoldings(holdingsResult);
-        setAllocation(allocationResult);
-      } catch (error) {
-        console.warn('Failed to refresh portfolio after trade:', error);
-      }
-
-      // Refresh again after 500ms for consistency
-      window.setTimeout(async () => {
-        try {
-          const [summaryResult, holdingsResult, allocationResult] = await Promise.all([
-            portfolioService.summary(),
-            portfolioService.list(),
-            portfolioService.allocation(),
-          ]);
-          setSummary(summaryResult);
-          setHoldings(holdingsResult);
-          setAllocation(allocationResult);
-        } catch (error) {
-          console.warn('Failed to refresh portfolio after 500ms:', error);
-        }
-      }, 500);
-
-      // Refresh growth data
-      try {
-        const result = await portfolioService.growth(range);
-        growthCacheRef.current[range] = result;
-        setGrowth(result);
-      } catch (error) {
-        console.warn('Failed to refresh growth after trade:', error);
-      }
-    };
-
-    window.addEventListener('tradeCompleted', handleTradeCompleted);
-    return () => window.removeEventListener('tradeCompleted', handleTradeCompleted);
-  }, [range]);
 
   async function handleAddHolding(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -219,50 +107,14 @@ export default function PortfolioPage() {
     }
     if (!addQty) return;
 
-    const quantity = Number(addQty);
-
-    setAddLoading(true);
     setAddError('');
     try {
       // Buy at the current market price; the server sets the execution price
-      await portfolioService.add(symbolValidated, quantity);
+      await buyMutation.mutateAsync({ symbol: symbolValidated, quantity: Number(addQty) });
       resetAddForm();
       setShowAddForm(false);
-
-      // Immediately refetch portfolio
-      try {
-        const [summaryResult, holdingsResult, allocationResult] = await Promise.all([
-          portfolioService.summary(),
-          portfolioService.list(),
-          portfolioService.allocation(),
-        ]);
-        setSummary(summaryResult);
-        setHoldings(holdingsResult);
-        setAllocation(allocationResult);
-      } catch (error) {
-        console.warn('Failed to refresh portfolio:', error);
-      }
-
-      // Refetch again after 500ms for consistency
-      window.setTimeout(async () => {
-        try {
-          const [summaryResult, holdingsResult, allocationResult] = await Promise.all([
-            portfolioService.summary(),
-            portfolioService.list(),
-            portfolioService.allocation(),
-          ]);
-          setSummary(summaryResult);
-          setHoldings(holdingsResult);
-          setAllocation(allocationResult);
-        } catch (error) {
-          console.warn('Failed to verify portfolio after 500ms:', error);
-        }
-      }, 500);
     } catch (err) {
       setAddError(getErrorMessage(err));
-      console.error('Error adding holding:', err);
-    } finally {
-      setAddLoading(false);
     }
   }
 
@@ -294,7 +146,7 @@ export default function PortfolioPage() {
         >
         {/* ── Summary Cards ── */}
         <section className="mb-8 grid gap-4 md:grid-cols-4">
-          {loadingPortfolio ? (
+          {loadingSummary ? (
             <>
               {Array.from({ length: 4 }).map((_, i) => (
                 <SurfaceCard key={i} className="p-5 min-h-[140px] flex flex-col justify-between">
@@ -306,10 +158,10 @@ export default function PortfolioPage() {
           ) : (
             (
               [
-                ['Total Invested', formatCurrency(summary?.total_invested)],
-                ['Current Value', formatCurrency(summary?.current_value)],
-                ['Overall P&L', `${formatCurrency(summary?.total_pl)} ${formatPercent(summary?.percent_pl)}`],
-                ['Buying Power', formatCurrency(summary?.buying_power)],
+                ['Total Invested', summary ? formatCurrency(summary.total_invested) : '—'],
+                ['Current Value', summary ? formatCurrency(summary.current_value) : '—'],
+                ['Overall P&L', summary ? `${formatCurrency(summary.total_pl)} ${formatPercent(summary.percent_pl)}` : '—'],
+                ['Buying Power', summary ? formatCurrency(summary.buying_power) : '—'],
               ] as [string, string][]
             ).map(([label, value], index) => (
               <SurfaceCard key={label} className="p-5 min-h-[140px] flex flex-col justify-between">
@@ -440,8 +292,13 @@ export default function PortfolioPage() {
                 </span>
               </div>
             </div>
-            {loadingPortfolio || holdings.length === 0 ? (
-              loadingPortfolio ? (
+            {holdingsQuery.isError ? (
+              <div className="flex items-center justify-between px-6 py-6">
+                <p className="text-sm text-tertiary">Failed to load holdings.</p>
+                <button onClick={() => holdingsQuery.refetch()} className="rounded-xl bg-[var(--surface-high)] px-4 py-2 text-xs text-white">Retry</button>
+              </div>
+            ) : loadingHoldings || holdings.length === 0 ? (
+              loadingHoldings ? (
                 <div className="space-y-2 p-6">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <div key={i} className="flex items-center gap-4 border-b border-white/5 py-4 px-5">

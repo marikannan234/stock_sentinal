@@ -1,64 +1,27 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard } from '@/components/sentinel/primitives';
 import { ErrorBoundary } from '@/components/sentinel/error-boundary';
-import { marketService, tradeService } from '@/lib/api-service';
-import { useMarketStore } from '@/lib/store-v2';
-import type { LiveQuote, TradeHistoryItem, TradeHistorySummary } from '@/lib/types';
+import { useTradeHistoryQuery, useTradeHistorySummaryQuery } from '@/hooks/queries/use-trades';
 import { formatCurrency, formatPercent, exportToCSV } from '@/lib/sentinel-utils';
 
 type FilterType = 'all' | 'profitable' | 'loss';
 type SortType = 'latest' | 'oldest' | 'highest-profit';
 
 export default function TradeHistoryPage() {
-  const [summary, setSummary] = useState<TradeHistorySummary | null>(null);
-  const [history, setHistory] = useState<TradeHistoryItem[]>([]);
-  
-  // Use global store for ribbon (no polling needed - DataSyncProvider handles it)
-  const ribbon = useMarketStore((state) => state.ribbon);
-  
-  // UI States
-  const [loadingSummary, setLoadingSummary] = useState(true);
-  const [loadingHistory, setLoadingHistory] = useState(true);
+  // Refreshed by the trade mutations (they invalidate ['trades']).
+  const summaryQuery = useTradeHistorySummaryQuery();
+  const historyQuery = useTradeHistoryQuery();
+  const summary = summaryQuery.data;
+  const history = useMemo(() => historyQuery.data ?? [], [historyQuery.data]);
+  const loadingSummary = summaryQuery.isPending;
+  const loadingHistory = historyQuery.isPending;
+
   const [filter, setFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortType>('latest');
-
-  // Fetch data
-  useEffect(() => {
-    setLoadingSummary(true);
-    Promise.all([
-      tradeService.historySummary().then(setSummary).catch(() => setSummary(null)),
-    ]).finally(() => setLoadingSummary(false));
-  }, []);
-
-  useEffect(() => {
-    setLoadingHistory(true);
-    tradeService
-      .history()
-      .then(setHistory)
-      .catch(() => setHistory([]))
-      .finally(() => setLoadingHistory(false));
-  }, []);
-
-  // Listen for trade completion events to refresh history
-  useEffect(() => {
-    const handleTradeCompleted = () => {
-      // Refresh trade history and summary after trade
-      setLoadingHistory(true);
-      Promise.all([
-        tradeService.historySummary().then(setSummary).catch(() => setSummary(null)),
-        tradeService.history()
-          .then(setHistory)
-          .catch(() => setHistory([])),
-      ]).finally(() => setLoadingHistory(false));
-    };
-
-    window.addEventListener('tradeCompleted', handleTradeCompleted);
-    return () => window.removeEventListener('tradeCompleted', handleTradeCompleted);
-  }, []);
 
   // Filter trades
   const filteredTrades = useMemo(() => {
@@ -100,7 +63,7 @@ export default function TradeHistoryPage() {
     return sorted;
   }, [filteredTrades, sortBy]);
 
-  const hasNoTrades = history.length === 0 && !loadingHistory;
+  const hasNoTrades = history.length === 0 && historyQuery.isSuccess;
   const filteredCount = filteredTrades.length;
 
   return (
@@ -109,7 +72,6 @@ export default function TradeHistoryPage() {
         <SentinelShell
           title="Trade History"
           subtitle="Comprehensive ledger of all completed and pending executions."
-          ribbon={ribbon}
         >
         {/* Summary Cards */}
         <section className="mb-8 grid gap-4 md:grid-cols-4">
@@ -120,7 +82,7 @@ export default function TradeHistoryPage() {
             {loadingSummary ? (
               <div className="mt-2 h-10 w-20 animate-pulse rounded bg-[var(--surface-high)]" />
             ) : (
-              <p className="font-mono text-4xl text-white">{summary?.total_trades ?? 0}</p>
+              <p className="font-mono text-4xl text-white">{summary ? summary.total_trades : '—'}</p>
             )}
           </SurfaceCard>
 
@@ -131,7 +93,7 @@ export default function TradeHistoryPage() {
             {loadingSummary ? (
               <div className="mt-2 h-10 w-20 animate-pulse rounded bg-[var(--surface-high)]" />
             ) : (
-              <p className="font-mono text-4xl text-secondary">{formatPercent(summary?.win_rate)}</p>
+              <p className="font-mono text-4xl text-secondary">{summary ? formatPercent(summary.win_rate) : '—'}</p>
             )}
           </SurfaceCard>
 
@@ -143,7 +105,7 @@ export default function TradeHistoryPage() {
               <div className="mt-2 h-10 w-20 animate-pulse rounded bg-[var(--surface-high)]" />
             ) : (
               <p className={`font-mono text-4xl ${(summary?.net_profit ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary'}`}>
-                {(summary?.net_profit ?? 0) >= 0 ? '+' : ''}{formatCurrency(summary?.net_profit ?? 0)}
+                {summary ? `${summary.net_profit >= 0 ? '+' : ''}${formatCurrency(summary.net_profit)}` : '—'}
               </p>
             )}
           </SurfaceCard>
@@ -172,7 +134,7 @@ export default function TradeHistoryPage() {
                 <div>
                   <h2 className="text-lg font-bold text-white">Trade History</h2>
                   <p className="text-sm text-[var(--on-surface-variant)]">
-                    {loadingHistory ? 'Loading...' : filteredCount === 0 && hasNoTrades ? 'No trades' : `${filteredCount} trade${filteredCount !== 1 ? 's' : ''}`}
+                    {loadingHistory ? 'Loading...' : historyQuery.isError ? 'Unavailable' : filteredCount === 0 && hasNoTrades ? 'No trades' : `${filteredCount} trade${filteredCount !== 1 ? 's' : ''}`}
                   </p>
                 </div>
 
@@ -215,8 +177,12 @@ export default function TradeHistoryPage() {
               </div>
             </div>
 
-            {/* Empty State */}
-            {hasNoTrades ? (
+            {historyQuery.isError ? (
+              <div className="flex items-center justify-between px-6 py-6">
+                <p className="text-sm text-tertiary">Failed to load trade history.</p>
+                <button onClick={() => historyQuery.refetch()} className="rounded-xl bg-[var(--surface-high)] px-4 py-2 text-xs text-white">Retry</button>
+              </div>
+            ) : /* Empty State */ hasNoTrades ? (
               <div className="flex flex-col items-center justify-center py-16">
                 <div className="text-center">
                   <p className="text-3xl mb-2">📊</p>

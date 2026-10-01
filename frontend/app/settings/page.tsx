@@ -4,13 +4,12 @@ import { FormEvent, useEffect, useState } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard } from '@/components/sentinel/primitives';
-import { marketService, profileService, getErrorMessage } from '@/lib/api-service';
-import type { LiveQuote, UserProfile, UserSettings } from '@/lib/types';
+import { profileService, getErrorMessage } from '@/lib/api-service';
+import type { UserProfile, UserSettings } from '@/lib/types';
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
-  const [ribbon, setRibbon] = useState<LiveQuote[]>([]);
 
   // Profile editing
   const [editingName, setEditingName] = useState(false);
@@ -20,14 +19,13 @@ export default function SettingsPage() {
   const [nameSaved, setNameSaved] = useState(false);
 
   useEffect(() => {
-    Promise.allSettled([profileService.getProfile(), profileService.getSettings(), marketService.getLiveRibbon()]).then(
-      ([profileResult, settingsResult, ribbonResult]) => {
+    Promise.allSettled([profileService.getProfile(), profileService.getSettings()]).then(
+      ([profileResult, settingsResult]) => {
         if (profileResult.status === 'fulfilled') {
           setProfile(profileResult.value);
           setNameValue(profileResult.value.full_name ?? '');
         }
         if (settingsResult.status === 'fulfilled') setSettings(settingsResult.value);
-        if (ribbonResult.status === 'fulfilled') setRibbon(ribbonResult.value.stocks);
       },
     );
   }, []);
@@ -61,7 +59,7 @@ export default function SettingsPage() {
 
   return (
     <ProtectedScreen>
-      <SentinelShell title="Settings" subtitle="Configure your Sentinel cockpit and security preferences." ribbon={ribbon}>
+      <SentinelShell title="Settings" subtitle="Configure your Sentinel cockpit and security preferences.">
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-12 space-y-6 lg:col-span-8">
             {/* Profile */}

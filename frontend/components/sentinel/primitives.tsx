@@ -21,6 +21,7 @@ import {
   FileText,
   HelpCircle,
   Settings,
+  RefreshCw,
 } from 'lucide-react';
 
 const iconMap: Record<string, React.ComponentType<any>> = {
@@ -43,6 +44,7 @@ const iconMap: Record<string, React.ComponentType<any>> = {
   article: FileText,
   help_outline: HelpCircle,
   settings: Settings,
+  refresh: RefreshCw,
 };
 
 function parseSizeFromClass(className?: string): number {

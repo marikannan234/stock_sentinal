@@ -114,6 +114,18 @@ export const marketService = {
   },
 };
 
+// Authenticated dashboard sections; the backend returns fallback data instead of failing.
+export const dashboardService = {
+  async ribbon() {
+    const { data } = await api.get<LiveRibbon>('/dashboard/ribbon');
+    return data;
+  },
+  async market() {
+    const { data } = await api.get<MarketSummary>('/dashboard/market');
+    return data;
+  },
+};
+
 export const indicatorService = {
   async combined(symbol: string) {
     const { data } = await api.get<CombinedIndicators>('/indicators/combined', { params: { symbol } });
@@ -123,7 +135,8 @@ export const indicatorService = {
 
 export const newsService = {
   async global(limit = 12) {
-    const { data } = await api.get<NewsResponse>('/news', { params: { limit } });
+    // Trailing slash matches the backend route; '/news' costs a 307 redirect.
+    const { data } = await api.get<NewsResponse>('/news/', { params: { limit } });
     return data;
   },
   async bySymbol(symbol: string, limit = 12) {
@@ -247,7 +260,8 @@ export const tradeService = {
     const { data } = await api.get<Trade[]>('/trade/', { params: { status_filter: statusFilter, symbol_filter: symbolFilter } });
     return data;
   },
-  async create(payload: { symbol: string; quantity: number; entry_price: number; trade_type: string; notes?: string }) {
+  // entry_price is optional and ignored by the server, which executes at the market price.
+  async create(payload: { symbol: string; quantity: number; trade_type: string; entry_price?: number; notes?: string }) {
     const { data } = await api.post<Trade>('/trade/', payload);
     return data;
   },

@@ -38,14 +38,14 @@ Optional:
 
 ### Frontend
 
-The frontend reads only two variables. `frontend/.env.local` sets both for local development.
+The frontend reads only two variables, both in `frontend/lib/config.ts`. Both are **origins only**: the app appends `/api` and `/ws` itself, and a value with a path is rejected. For local development, copy `frontend/.env.example` to `frontend/.env.local` (git-ignored).
 
 | Variable | Default |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` (the client calls `${NEXT_PUBLIC_API_URL}/api`) |
-| `NEXT_PUBLIC_WS_URL` | derived from the API URL (`ws://…/ws/alerts`) |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` in development (the client calls `${NEXT_PUBLIC_API_URL}/api`). **Required** for `npm run build`. |
+| `NEXT_PUBLIC_WS_URL` | the API origin with `http(s)` → `ws(s)` |
 
-`NEXT_PUBLIC_*` values are baked in at build time, so rebuild after changing them.
+`NEXT_PUBLIC_*` values are baked in at build time, so rebuild after changing them. For Docker, pass them as `--build-arg`; runtime environment variables have no effect.
 
 ## Option A: everything in Docker
 
@@ -71,6 +71,7 @@ alembic upgrade head               # required: the app never creates tables itse
 uvicorn app.main:app --reload --port 8000
 
 cd ../frontend
+cp .env.example .env.local      # first time only
 npm install
 npm run dev
 ```

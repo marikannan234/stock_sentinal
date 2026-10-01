@@ -4,6 +4,8 @@
  * Prevents duplicate connections and reconnect loops
  */
 
+import { config } from './config';
+
 type AlertMessage = {
   type: 'alert' | 'pong';
   message?: string;
@@ -37,14 +39,7 @@ class AlertWSManager {
   private buildWSUrl(): string {
     if (typeof window === 'undefined') return '';
 
-    let wsUrl = process.env.NEXT_PUBLIC_WS_URL;
-
-    if (!wsUrl) {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-    }
-
-    return `${wsUrl}/ws/alerts`;
+    return `${config.WS_BASE_URL}/alerts`;
   }
 
   /**

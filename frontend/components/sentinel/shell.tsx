@@ -4,12 +4,14 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Tooltip } from 'react-tooltip';
-import type { AlertItem, LiveQuote, SymbolSearchItem } from '@/lib/types';
+import toast from 'react-hot-toast';
+import type { AlertItem, SymbolSearchItem } from '@/lib/types';
 import { cn, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 import { Icon } from './primitives';
 import { OptimizedRibbon } from './optimized-ribbon';
-import { alertService, marketService, portfolioService, getErrorMessage } from '@/lib/api-service';
-import { api } from '@/lib/api-client';
+import { useAlertsQuery } from '@/hooks/queries/use-alerts';
+import { useBuyMutation, useSellMutation } from '@/hooks/queries/use-trades';
+import { marketService, getErrorMessage } from '@/lib/api-service';
 
 type NavItem = {
   href: string;
@@ -34,9 +36,10 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
   const [symbol, setSymbol] = useState('');
   const [quantity, setQuantity] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
-  const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState('');
   const [error, setError] = useState('');
+  const buyMutation = useBuyMutation();
+  const sellMutation = useSellMutation();
+  const loading = buyMutation.isPending || sellMutation.isPending;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,55 +55,21 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
       return;
     }
 
-    setLoading(true);
+    const ticker = symbol.trim().toUpperCase();
     setError('');
 
     try {
+      // Market orders: the server sets the price and validates cash/holdings.
+      // The mutations refresh portfolio, trade history and this symbol's data.
       if (side === 'buy') {
-        // BUY at the current market price (the server sets the price)
-        await portfolioService.add((symbol || "").toUpperCase(), qty);
-        setToast(`✓ Bought ${qty} ${(symbol || "").toUpperCase()} at market price`);
+        await buyMutation.mutateAsync({ symbol: ticker, quantity: qty });
       } else {
-        // SELL: Validate portfolio before removing
-        // 1. Get current portfolio holdings
-        const portfolioHoldings = await portfolioService.list();
-        
-        // 2. Check if ticker exists in portfolio
-        const holding = portfolioHoldings.find((h) => (h.ticker || "").toUpperCase() === (symbol || "").toUpperCase());
-        if (!holding) {
-          throw new Error(`${(symbol || "").toUpperCase()} not found in portfolio`);
-        }
-        
-        // 3. Check if we have enough shares to sell
-        if (holding.quantity < qty) {
-          throw new Error(`Not enough shares of ${(symbol || "").toUpperCase()}. You have ${holding.quantity.toFixed(2)}, trying to sell ${qty}`);
-        }
-        
-        // 4. Send DELETE request with quantity via API service
-        await api.delete(`/portfolio/${(symbol || "").toUpperCase()}`, {
-          data: { quantity: qty },
-        });
-        
-        setToast(`✓ Sold ${qty} ${(symbol || "").toUpperCase()} at market price`);
+        await sellMutation.mutateAsync({ symbol: ticker, quantity: qty });
       }
-
-      setTimeout(() => {
-        // Dispatch custom event to refresh portfolio and trade history
-        window.dispatchEvent(new CustomEvent('tradeCompleted', {
-          detail: { symbol, qty, side }
-        }));
-        
-        setToast('');
-        setSymbol('');
-        setQuantity('');
-        onClose();
-      }, 2000);
+      toast.success(`${side === 'buy' ? 'Bought' : 'Sold'} ${qty} ${ticker} at market price`);
+      onClose();
     } catch (err: unknown) {
-      // Use getErrorMessage for better error parsing
-      const errorMsg = getErrorMessage(err, `${side === 'buy' ? 'Buy' : 'Sell'} failed. Please try again.`);
-      setError(errorMsg);
-    } finally {
-      setLoading(false);
+      setError(getErrorMessage(err, `${side === 'buy' ? 'Buy' : 'Sell'} failed. Please try again.`));
     }
   }
 
@@ -113,10 +82,7 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
           <h2 className="text-lg font-black uppercase tracking-[0.08em] text-white">Quick Trade</h2>
           <button onClick={onClose} className="text-[var(--on-surface-variant)] hover:text-white"><Icon name="close" /></button>
         </div>
-        {toast ? (
-          <div className="rounded-2xl bg-secondary/10 px-4 py-4 text-center text-sm font-bold text-secondary">{toast}</div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -168,7 +134,6 @@ function QuickTradeModal({ onClose }: { onClose: () => void }) {
               {loading ? 'Processing…' : side === 'buy' ? 'Place Buy Order' : 'Place Sell Order'}
             </button>
           </form>
-        )}
       </div>
     </div>
   );
@@ -310,25 +275,19 @@ export function SentinelShell({
   children,
   title,
   subtitle,
-  ribbon,
   headerActions,
   sidebarFooter,
 }: {
   children: ReactNode;
   title?: string;
   subtitle?: string;
-  ribbon?: LiveQuote[]; // @deprecated Use global store instead
   headerActions?: ReactNode;
   sidebarFooter?: ReactNode;
 }) {
   const pathname = usePathname();
   const [tradeOpen, setTradeOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
-
-  useEffect(() => {
-    alertService.list().then(setAlerts).catch(() => setAlerts([]));
-  }, []);
+  const alerts = useAlertsQuery().data ?? [];
 
   function handleLogout() {
     if (typeof window !== 'undefined') {

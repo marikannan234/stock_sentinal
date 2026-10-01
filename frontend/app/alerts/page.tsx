@@ -1,12 +1,18 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard } from '@/components/sentinel/primitives';
-import { alertService, marketService, getErrorMessage } from '@/lib/api-service';
-import { useMarketStore } from '@/lib/store-v2';
-import type { AlertItem, LiveQuote } from '@/lib/types';
+import {
+  useAlertsQuery,
+  useCreateAlertMutation,
+  useDeleteAlertMutation,
+  useSetAlertActiveMutation,
+  type CreateAlertPayload,
+} from '@/hooks/queries/use-alerts';
+import { getErrorMessage } from '@/lib/api-service';
+import type { AlertItem } from '@/lib/types';
 import { formatDateLabel } from '@/lib/sentinel-utils';
 
 // 'indicator' and 'combined' are form groups; the API type is picked below.
@@ -94,11 +100,12 @@ function getAlertTypeIcon(type: string): string {
 }
 
 export default function AlertsPage() {
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
-  const [loadError, setLoadError] = useState('');
-
-  // Use global store for ribbon (no polling needed - DataSyncProvider handles it)
-  const ribbon = useMarketStore((state) => state.ribbon);
+  const alertsQuery = useAlertsQuery();
+  const alerts = alertsQuery.data ?? [];
+  const createAlert = useCreateAlertMutation();
+  const setAlertActive = useSetAlertActiveMutation();
+  const deleteAlertMutation = useDeleteAlertMutation();
+  const listActionError = setAlertActive.error ?? deleteAlertMutation.error;
 
   // Form state
   const [symbol, setSymbol] = useState('');
@@ -114,23 +121,7 @@ export default function AlertsPage() {
   const [formError, setFormError] = useState('');
 
   const selectedIndicator = INDICATOR_TYPES.find((t) => t.value === indicatorType) ?? INDICATOR_TYPES[0];
-  const [formLoading, setFormLoading] = useState(false);
-
-  async function loadAlerts() {
-    try {
-      const data = await alertService.list();
-      setAlerts(data);
-      setLoadError('');
-    } catch {
-      setLoadError('Failed to load alerts. Please try again.');
-    }
-  }
-
-  useEffect(() => {
-    Promise.allSettled([loadAlerts()]).then(() => {
-      // Alerts are now loaded; ribbon is globally managed by DataSyncProvider
-    });
-  }, []);
+  const formLoading = createAlert.isPending;
 
   // Validate form based on alert type
   function isFormValid() {
@@ -152,10 +143,9 @@ export default function AlertsPage() {
       return;
     }
     
-    setFormLoading(true);
     setFormError('');
     try {
-      const payload: Parameters<typeof alertService.create>[0] = {
+      const payload: CreateAlertPayload = {
         stock_symbol: (symbol || "").toUpperCase(),
         alert_type: alertType,
       };
@@ -177,42 +167,31 @@ export default function AlertsPage() {
         }
       }
 
-      await alertService.create(payload);
+      await createAlert.mutateAsync(payload);
       setSymbol('');
       setTarget('');
       setAlertType('price');
       setCondition('>');
       setIndicatorType(INDICATOR_TYPES[0].value);
       setPeriod(INDICATOR_TYPES[0].defaultPeriod);
-      await loadAlerts();
     } catch (err) {
       setFormError(getErrorMessage(err));
-    } finally {
-      setFormLoading(false);
     }
   }
 
-  async function toggleAlert(id: number, isActive: boolean) {
-    try {
-      await alertService.update(id, !isActive);
-      await loadAlerts();
-    } catch {
-      // ignore
-    }
+  function toggleAlert(id: number, isActive: boolean) {
+    deleteAlertMutation.reset();
+    setAlertActive.mutate({ id, isActive: !isActive });
   }
 
-  async function deleteAlert(id: number) {
-    try {
-      await alertService.remove(id);
-      await loadAlerts();
-    } catch {
-      // ignore
-    }
+  function deleteAlert(id: number) {
+    setAlertActive.reset();
+    deleteAlertMutation.mutate(id);
   }
 
   return (
     <ProtectedScreen>
-      <SentinelShell title="Alerts" subtitle="Price-based sentinel triggers and monitoring." ribbon={ribbon}>
+      <SentinelShell title="Alerts" subtitle="Price-based sentinel triggers and monitoring.">
         <div className="grid grid-cols-12 gap-6">
           {/* ── Create Alert Form ── */}
           <SurfaceCard className="col-span-12 p-6 lg:col-span-4">
@@ -389,12 +368,17 @@ export default function AlertsPage() {
           <SurfaceCard className="col-span-12 overflow-hidden lg:col-span-8">
             <div className="border-b border-white/5 px-6 py-4">
               <h2 className="text-lg font-bold text-white">Active Watch Grid</h2>
+              {listActionError ? (
+                <p className="mt-1 text-xs text-tertiary">{getErrorMessage(listActionError, 'Could not update the alert. Please try again.')}</p>
+              ) : null}
             </div>
 
-            {loadError ? (
+            {alertsQuery.isPending ? (
+              <p className="px-6 py-8 text-sm text-[var(--on-surface-variant)]">Loading alerts…</p>
+            ) : alertsQuery.isError ? (
               <div className="flex items-center justify-between px-6 py-6">
-                <p className="text-sm text-tertiary">{loadError}</p>
-                <button onClick={loadAlerts} className="rounded-xl bg-[var(--surface-high)] px-4 py-2 text-xs text-white">Retry</button>
+                <p className="text-sm text-tertiary">Failed to load alerts. Please try again.</p>
+                <button onClick={() => alertsQuery.refetch()} className="rounded-xl bg-[var(--surface-high)] px-4 py-2 text-xs text-white">Retry</button>
               </div>
             ) : alerts.length === 0 ? (
               <p className="px-6 py-8 text-sm text-[var(--on-surface-variant)]">No alerts configured yet. Create one to get started.</p>

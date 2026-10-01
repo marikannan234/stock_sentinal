@@ -102,7 +102,6 @@ These are tracked for later work and are not solved yet:
 - CORS allows only `http://localhost:3000` and `http://127.0.0.1:3000`; `BACKEND_CORS_ORIGINS` is ignored.
 - `/ws/alerts` has no authentication and would broadcast to every client, so alert push over WebSocket is switched off for now (email and WhatsApp work).
 - The global poller writes to `lib/store.ts`, but several pages read `lib/store-v2.ts`.
-- `frontend/.env.production` and `.env.staging` use variable names the code doesn't read.
 - The scheduler and caches live in the process, so running more than one backend process duplicates alert checks.
 - The models and migrations differ outside the trading and alert tables; `alembic check` is not clean.
 - `/api/indicators` (the indicator endpoints, separate from alerts) still fetches only 1–3 months of history, so SMA-50 and longer fail there.

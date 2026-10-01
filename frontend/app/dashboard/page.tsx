@@ -1,135 +1,45 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelLineChart } from '@/components/sentinel/charts';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { Icon, StatChip, SurfaceCard, Skeleton } from '@/components/sentinel/primitives';
-import { portfolioService } from '@/lib/api-service';
-import { api } from '@/lib/api-client';
-import { useMarketStore } from '@/lib/store-v2';
-import type { LiveQuote, MarketSummary, NewsArticle, PortfolioGrowthPoint, PortfolioSummary } from '@/lib/types';
+import { useMarketSummaryQuery } from '@/hooks/queries/use-market';
+import { useGlobalNewsQuery } from '@/hooks/queries/use-news';
+import { usePortfolioGrowthQuery, usePortfolioSummaryQuery, type PortfolioRange } from '@/hooks/queries/use-portfolio';
 import { formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
 const dashRanges = ['1D', '1W', '1M', '1Y'] as const;
 type DashRange = typeof dashRanges[number];
-const rangeMap: Record<DashRange, '1d' | '1w' | '1m' | '1y'> = { '1D': '1d', '1W': '1w', '1M': '1m', '1Y': '1y' };
+const rangeMap: Record<DashRange, PortfolioRange> = { '1D': '1d', '1W': '1w', '1M': '1m', '1Y': '1y' };
 
-type RibbonResponse = {
-  stocks?: LiveQuote[];
-};
+const DASHBOARD_NEWS_COUNT = 3;
+
+/** Shows '—' instead of a fabricated $0.00 when the value could not be loaded. */
+function orDash(value: number | undefined, format: (v: number) => string) {
+  return value === undefined ? '—' : format(value);
+}
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
-  const [news, setNews] = useState<NewsArticle[]>([]);
-  const [growth, setGrowth] = useState<PortfolioGrowthPoint[]>([]);
   const [activeRange, setActiveRange] = useState<DashRange>('1D');
-  const [portfolioLoading, setPortfolioLoading] = useState(true);
-  const [newsLoading, setNewsLoading] = useState(true);
-  const [growthLoading, setGrowthLoading] = useState(true);
 
-  // Use global store for market data (no local polling needed - DataSyncProvider handles it)
-  const market = useMarketStore((state) => state.market);
-  const isMarketLoading = useMarketStore((state) => state.isMarketLoading);
+  const portfolioQuery = usePortfolioSummaryQuery();
+  const growthQuery = usePortfolioGrowthQuery(rangeMap[activeRange]);
+  const marketQuery = useMarketSummaryQuery();
+  const newsQuery = useGlobalNewsQuery();
 
-  // 🚨 PREVENT API CALLS WITHOUT TOKEN
-  useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('stocksentinel_token') : null;
-    if (!token) {
-      router.replace('/login');
-      return;
-    }
-  }, [router]);
+  const portfolio = portfolioQuery.data;
+  const portfolioLoading = portfolioQuery.isPending;
+  const growth = growthQuery.data ?? [];
+  const news = useMemo(() => (newsQuery.data ?? []).slice(0, DASHBOARD_NEWS_COUNT), [newsQuery.data]);
 
-  // Load portfolio and news data once on mount
-  useEffect(() => {
-    let isMounted = true;
-
-    // Don't load without token
-    const token = typeof window !== 'undefined' ? localStorage.getItem('stocksentinel_token') : null;
-    if (!token) return;
-
-    const loadInitialData = async () => {
-      if (!isMounted) return;
-
-      try {
-        // Portfolio load
-        setPortfolioLoading(true);
-        const portfolioData = await api.get<PortfolioSummary>('/dashboard/portfolio');
-        if (isMounted) setPortfolio(portfolioData.data ?? null);
-      } catch (error) {
-        if (isMounted) {
-          console.warn('Failed to fetch portfolio:', error);
-          setPortfolio(null);
-        }
-      } finally {
-        if (isMounted) setPortfolioLoading(false);
-      }
-
-      try {
-        // News load
-        setNewsLoading(true);
-        const newsData = await api.get<NewsArticle[]>('/dashboard/news', { params: { limit: 3 } });
-        if (isMounted) {
-          setNews(Array.isArray(newsData.data) && newsData.data.length > 0 ? newsData.data.slice(0, 3) : []);
-        }
-      } catch (error) {
-        if (isMounted) {
-          console.warn('Failed to fetch news:', error);
-          setNews([]);
-        }
-      } finally {
-        if (isMounted) setNewsLoading(false);
-      }
-    };
-
-    void loadInitialData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setGrowthLoading(true);
-
-    portfolioService
-      .growth(rangeMap[activeRange])
-      .then((points) => {
-        if (!cancelled) {
-          setGrowth(points);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setGrowth([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setGrowthLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRange]);
-
-  const handleRangeChange = useCallback((range: DashRange) => {
-    setActiveRange(range);
-  }, []);
-
+  const market = marketQuery.data;
   const movers = useMemo(() => {
     if (!market) return [];
     return [...(market.top_gainers ?? []).slice(0, 2), ...(market.top_losers ?? []).slice(0, 1)];
   }, [market]);
-
-  const noMarketData = !isMarketLoading && !market;
 
   return (
     <ProtectedScreen>
@@ -143,11 +53,14 @@ export default function DashboardPage() {
                   <div>
                     <p className="mb-2 text-xs uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Portfolio Net Worth</p>
                     <h1 className="font-mono text-[48px] font-medium tracking-[-0.07em] text-white">
-                      {portfolioLoading ? <Skeleton className="h-12 w-48" /> : formatCurrency(portfolio?.current_value ?? 0)}
+                      {portfolioLoading ? <Skeleton className="h-12 w-48" /> : orDash(portfolio?.current_value, formatCurrency)}
                     </h1>
+                    {portfolioQuery.isError && !portfolio ? (
+                      <p className="mt-1 text-xs text-tertiary">Unable to load portfolio.</p>
+                    ) : null}
                   </div>
                   <div className="rounded-full bg-[rgba(78,222,163,0.12)] px-3 py-1 text-xs font-bold text-secondary">
-                    {portfolioLoading ? <Skeleton className="h-4 w-12" /> : formatPercent(portfolio?.day_percent ?? 0)}
+                    {portfolioLoading ? <Skeleton className="h-4 w-12" /> : orDash(portfolio?.day_percent, formatPercent)}
                   </div>
                 </div>
                 <div className="grid gap-6 md:grid-cols-3">
@@ -159,9 +72,9 @@ export default function DashboardPage() {
                     </>
                   ) : (
                     <>
-                      <StatChip label="Today's P&L" value={formatCurrency(portfolio?.day_pl ?? 0)} tone={(portfolio?.day_pl ?? 0) >= 0 ? 'positive' : 'negative'} />
-                      <StatChip label="Buying Power" value={formatCurrency(portfolio?.buying_power ?? 0)} />
-                      <StatChip label="Total Return" value={formatPercent(portfolio?.percent_pl ?? 0)} tone={(portfolio?.percent_pl ?? 0) >= 0 ? 'positive' : 'negative'} />
+                      <StatChip label="Today's P&L" value={orDash(portfolio?.day_pl, formatCurrency)} tone={(portfolio?.day_pl ?? 0) >= 0 ? 'positive' : 'negative'} />
+                      <StatChip label="Buying Power" value={orDash(portfolio?.buying_power, formatCurrency)} />
+                      <StatChip label="Total Return" value={orDash(portfolio?.percent_pl, formatPercent)} tone={(portfolio?.percent_pl ?? 0) >= 0 ? 'positive' : 'negative'} />
                     </>
                   )}
                 </div>
@@ -178,7 +91,7 @@ export default function DashboardPage() {
                   {dashRanges.map((range) => (
                     <button
                       key={range}
-                      onClick={() => handleRangeChange(range)}
+                      onClick={() => setActiveRange(range)}
                       className={range === activeRange ? 'rounded-lg bg-[var(--surface-highest)] px-3 py-1 text-white' : 'px-3 py-1 text-[var(--on-surface-variant)] hover:text-white'}
                     >
                       {range}
@@ -187,13 +100,13 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="rounded-2xl bg-[rgba(14,14,16,0.34)] p-4">
-                {growthLoading ? (
+                {growthQuery.isPending ? (
                   <Skeleton className="h-32 w-full" />
                 ) : growth.length > 0 ? (
                   <SentinelLineChart points={growth} accent="#adc6ff" compact />
                 ) : (
                   <div className="flex h-32 items-center justify-center text-sm text-[var(--on-surface-variant)]">
-                    No data available
+                    {growthQuery.isError ? 'Unable to load chart data' : 'No data available'}
                   </div>
                 )}
               </div>
@@ -207,14 +120,14 @@ export default function DashboardPage() {
                 <Icon name="more_horiz" className="text-[18px] text-[var(--on-surface-variant)]" />
               </div>
               <div className="space-y-3">
-                {isMarketLoading ? (
+                {marketQuery.isPending ? (
                   <>
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
                   </>
                 ) : movers.length === 0 ? (
-                  <p className="text-xs text-[var(--on-surface-variant)]">{noMarketData ? 'No data available' : 'No market movers available'}</p>
+                  <p className="text-xs text-[var(--on-surface-variant)]">{marketQuery.isError && !market ? 'Market data unavailable' : 'No market movers available'}</p>
                 ) : (
                   movers.map((item) => (
                     <Link key={item.symbol} href={`/stocks/${item.symbol}`} className="flex items-center justify-between rounded-2xl px-2 py-2 hover:bg-[var(--surface-high)] transition-colors">
@@ -240,14 +153,14 @@ export default function DashboardPage() {
             <SurfaceCard className="p-6">
               <h2 className="mb-5 text-sm font-bold uppercase tracking-[0.18em] text-white">Market News</h2>
               <div className="space-y-5">
-                {newsLoading ? (
+                {newsQuery.isPending ? (
                   <>
                     <Skeleton className="h-16 w-full" />
                     <Skeleton className="h-16 w-full" />
                     <Skeleton className="h-16 w-full" />
                   </>
                 ) : news.length === 0 ? (
-                  <p className="text-sm text-[var(--on-surface-variant)]">Unable to load news</p>
+                  <p className="text-sm text-[var(--on-surface-variant)]">{newsQuery.isError ? 'Unable to load news' : 'No news available'}</p>
                 ) : (
                   news.map((article) => (
                     <a key={article.url} href={article.url} target="_blank" rel="noreferrer" className="block">

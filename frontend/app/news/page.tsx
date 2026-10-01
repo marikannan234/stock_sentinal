@@ -1,20 +1,15 @@
 'use client';
 
 /**
- * Optimized News Page
- * Features:
- * - Uses cached news from global store
- * - Lazy loading with skeleton screens
- * - Infinite scroll / pagination
- * - Non-blocking loading
- * - Search and filter
+ * News page: global market news from the shared ['news','global'] query
+ * (also used by the dashboard), with client-side search and "load more".
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard, Skeleton, Icon } from '@/components/sentinel/primitives';
-import { useNewsData } from '@/hooks/useDataFetch';
+import { useGlobalNewsQuery } from '@/hooks/queries/use-news';
 import type { NewsArticle } from '@/lib/types';
 import { formatRelativeTime } from '@/lib/sentinel-utils';
 
@@ -35,9 +30,15 @@ function sentimentBadge(sentiment?: string | null) {
 }
 
 const ARTICLES_PER_PAGE = 12;
+const NO_ARTICLES: NewsArticle[] = [];
 
 export default function NewsPage() {
-  const { news: cachedNews, newsLoading, isRefetching, refetch } = useNewsData(50);
+  const newsQuery = useGlobalNewsQuery();
+  // Stable reference while there is no data, so the effects below don't loop.
+  const cachedNews = newsQuery.data ?? NO_ARTICLES;
+  const isRefetching = newsQuery.isFetching && !newsQuery.isPending;
+  // A failed refresh keeps the last articles on screen; say so instead of hiding it.
+  const refreshFailed = newsQuery.isError && newsQuery.data !== undefined;
 
   // Local pagination state
   const [displayedArticles, setDisplayedArticles] = useState<NewsArticle[]>([]);
@@ -107,8 +108,8 @@ export default function NewsPage() {
             />
           </div>
           <button
-            onClick={() => refetch()}
-            disabled={isRefetching}
+            onClick={() => newsQuery.refetch()}
+            disabled={newsQuery.isFetching}
             className="flex items-center gap-2 rounded-xl bg-[var(--surface-high)] px-4 py-2.5 text-sm font-medium text-white transition-all disabled:opacity-50"
           >
             <Icon name={isRefetching ? 'progress_activity' : 'refresh'} className={isRefetching ? 'animate-spin' : ''} />
@@ -116,9 +117,25 @@ export default function NewsPage() {
           </button>
         </div>
 
+        {refreshFailed ? (
+          <p className="mb-4 text-xs text-tertiary">Couldn&apos;t refresh news. Showing the last loaded articles.</p>
+        ) : null}
+
         {/* Loading State - Non-blocking skeleton */}
-        {newsLoading && displayedArticles.length === 0 ? (
+        {newsQuery.isPending ? (
           renderSkeletons()
+        ) : newsQuery.isError && newsQuery.data === undefined ? (
+          <div className="flex min-h-[40vh] items-center justify-center">
+            <div className="text-center">
+              <p className="mb-4 text-sm text-tertiary">Unable to load news right now.</p>
+              <button
+                onClick={() => newsQuery.refetch()}
+                className="rounded-xl bg-[var(--surface-high)] px-4 py-2.5 text-sm font-medium text-white"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
         ) : filteredArticles.length === 0 ? (
           <div className="flex min-h-[40vh] items-center justify-center">
             <div className="text-center">
