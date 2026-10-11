@@ -155,16 +155,15 @@ logger.info("Exception handlers configured")
 # ============================================
 # Configure CORS
 # ============================================
-cors_origins = [str(o) for o in settings.BACKEND_CORS_ORIGINS]
-if "http://localhost:3000" not in cors_origins:
-    cors_origins.append("http://localhost:3000")
+# Normalize configured origins and always permit local development origins.
+cors_origins = [str(o).rstrip("/") for o in settings.BACKEND_CORS_ORIGINS]
+for local_origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
+    if local_origin not in cors_origins:
+        cors_origins.append(local_origin)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000"
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
