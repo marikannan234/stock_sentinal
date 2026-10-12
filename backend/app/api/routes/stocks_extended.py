@@ -134,6 +134,24 @@ def _run_silenced_yfinance(request_fn):
         return request_fn()
 
 
+def _run_with_timeout(request_fn, timeout_seconds: float):
+    """Run provider work without waiting for a timed-out worker on context exit."""
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(request_fn)
+    try:
+        result = future.result(timeout=timeout_seconds)
+    except FutureTimeoutError:
+        future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+    except Exception:
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+    else:
+        executor.shutdown(wait=True)
+        return result
+
+
 # yf.download() is not thread-safe: it builds its result from module-level
 # state (yfinance.shared._DFS), which every call resets and refills. Two
 # overlapping calls can therefore return each other's data (NVDA priced with
@@ -170,13 +188,11 @@ def _fetch_market_quotes_batch(symbols: List[str]) -> List[StockQuote]:
                 timeout=2,  # Max 2 seconds
             )
         
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_fetch)
-            try:
-                data = future.result(timeout=2)  # Hard timeout at 2 seconds
-            except FutureTimeoutError:
-                logger.warning(f"⚠️ Batch fetch TIMEOUT for {len(symbols)} stocks (>2s) - no live snapshot")
-                return []
+        try:
+            data = _run_with_timeout(_fetch, timeout_seconds=2)
+        except FutureTimeoutError:
+            logger.warning(f"⚠️ Batch fetch TIMEOUT for {len(symbols)} stocks (>2s) - no live snapshot")
+            return []
     except Exception as e:
         logger.debug(f"Batch market data fetch failed: {str(e)[:100]}")
         return []
@@ -336,18 +352,19 @@ def _fetch_finnhub_quote(symbol: str) -> Optional[Dict[str, Any]]:
         params = {"symbol": quote_symbol(symbol), "token": api_key}
         
         # Use ThreadPoolExecutor with timeout to ENFORCE max 2 seconds
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(requests.get, url, params=params, timeout=2)
-            try:
-                resp = future.result(timeout=2)
-                if resp.status_code == 200:
-                    logger.debug(f"Finnhub SUCCESS for {symbol}: ${resp.json().get('c', 0)}")
-                    return resp.json()
-                logger.warning(f"Finnhub HTTP {resp.status_code} for {symbol}")
-                return None
-            except FutureTimeoutError:
-                logger.warning(f"⚠️ Finnhub TIMEOUT for {symbol} (>2s)")
-                return None
+        try:
+            resp = _run_with_timeout(
+                lambda: requests.get(url, params=params, timeout=2),
+                timeout_seconds=2,
+            )
+        except FutureTimeoutError:
+            logger.warning(f"⚠️ Finnhub TIMEOUT for {symbol} (>2s)")
+            return None
+        if resp.status_code == 200:
+            logger.debug(f"Finnhub SUCCESS for {symbol}: ${resp.json().get('c', 0)}")
+            return resp.json()
+        logger.warning(f"Finnhub HTTP {resp.status_code} for {symbol}")
+        return None
     except Exception as e:
         logger.warning(f"Finnhub error for {symbol}: {str(e)[:100]}")
         return None
@@ -371,30 +388,28 @@ def _fetch_yfinance_current_price(symbol: str) -> Optional[float]:
                 timeout=2,
             )
         
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_fetch)
-            try:
-                data = future.result(timeout=2)
-                if data is None or not hasattr(data, "empty") or data.empty or "Close" not in data.columns:
-                    return None
-                closes = data["Close"]
-                # history() returns one symbol's flat columns. Anything else
-                # (several tickers' columns) is ambiguous, so it is rejected
-                # rather than guessing which column is this symbol.
-                if not isinstance(closes, pd.Series):
-                    logger.warning(f"yfinance returned ambiguous price data for {symbol}; ignoring it")
-                    return None
-                closes = closes.dropna()
-                if closes.empty:
-                    return None
-                price = float(closes.iloc[-1])
-                if price > 0:
-                    logger.debug(f"yfinance SUCCESS for {symbol}: ${price}")
-                    return price
-                return None
-            except FutureTimeoutError:
-                logger.warning(f"⚠️ yfinance TIMEOUT for {symbol} (>2s)")
-                return None
+        try:
+            data = _run_with_timeout(_fetch, timeout_seconds=2)
+        except FutureTimeoutError:
+            logger.warning(f"⚠️ yfinance TIMEOUT for {symbol} (>2s)")
+            return None
+        if data is None or not hasattr(data, "empty") or data.empty or "Close" not in data.columns:
+            return None
+        closes = data["Close"]
+        # history() returns one symbol's flat columns. Anything else
+        # (several tickers' columns) is ambiguous, so it is rejected
+        # rather than guessing which column is this symbol.
+        if not isinstance(closes, pd.Series):
+            logger.warning(f"yfinance returned ambiguous price data for {symbol}; ignoring it")
+            return None
+        closes = closes.dropna()
+        if closes.empty:
+            return None
+        price = float(closes.iloc[-1])
+        if price > 0:
+            logger.debug(f"yfinance SUCCESS for {symbol}: ${price}")
+            return price
+        return None
     except Exception as e:
         logger.warning(f"yfinance error for {symbol}: {str(e)[:100]}")
         return None
@@ -411,13 +426,11 @@ def _fetch_yfinance_quote_data(symbol: str) -> Optional[Dict[str, Any]]:
                 timeout=2,
             )
 
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_fetch)
-            try:
-                history = future.result(timeout=2)
-            except FutureTimeoutError:
-                logger.warning("yfinance quote data timeout for %s", symbol)
-                return None
+        try:
+            history = _run_with_timeout(_fetch, timeout_seconds=2)
+        except FutureTimeoutError:
+            logger.warning("yfinance quote data timeout for %s", symbol)
+            return None
 
         if history is None or not hasattr(history, "empty") or history.empty or "Close" not in history.columns:
             return None
