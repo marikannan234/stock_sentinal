@@ -626,7 +626,7 @@ def _build_live_quote(symbol: str) -> StockQuote:
         )
         _cache_stock_price(symbol_upper, quote)
         fetch_time = (time.time() - start_time) * 1000
-        logger.info(f"✓ yfinance price for {symbol_upper}: ${fallback_price} ({fetch_time:.0f}ms)")
+        logger.info(f"✓ yfinance price for {symbol_upper}: ${fallback_quote['price']} ({fetch_time:.0f}ms)")
         return quote
     
     # STEP 4: All APIs failed - error
