@@ -63,7 +63,7 @@ function StockChart({
     const window = closes.slice(index - 19, index + 1);
     return window.reduce((sum, value) => sum + value, 0) / window.length;
   });
-  const emaSeries: Array<number | null> = [];
+  const emaSeries: number[] = [];
   const emaMultiplier = 2 / 13;
   closes.forEach((close, index) => {
     if (index === 0) emaSeries.push(close);
