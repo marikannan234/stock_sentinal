@@ -154,10 +154,11 @@ async def get_global_news_endpoint(
 )
 async def get_global_news_with_sentiment(
     limit: int = Query(30, ge=1, le=100, description="Number of articles to return"),
+    refresh: bool = Query(False, description="Bypass the news cache for a manual refresh"),
 ) -> NewsWithSentimentResponse:
     """Return global market headlines with per-article and aggregate sentiment."""
     try:
-        articles = get_global_news(use_cache=True, limit=limit)
+        articles = get_global_news(use_cache=not refresh, limit=limit)
         if not articles:
             return NewsWithSentimentResponse(
                 articles=[],
