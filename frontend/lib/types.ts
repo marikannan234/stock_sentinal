@@ -67,6 +67,20 @@ export type StockIndicatorSet = {
   bollinger_middle?: number | null;
 };
 
+export type MLVolatilityEstimate = {
+  symbol: string;
+  horizon_days: number;
+  predicted_volatility_percent: number;
+  baseline_volatility_percent: number;
+  model_mae_percent: number;
+  baseline_mae_percent: number;
+  holdout_observations: number;
+  model_beats_baseline: boolean;
+  model_version: string;
+  methodology: string;
+  caveat: string;
+};
+
 export type HistoricalPoint = {
   timestamp: string;
   open: number;
