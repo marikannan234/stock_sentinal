@@ -12,6 +12,7 @@ Endpoints:
   GET    /alerts/symbol/{symbol} - Get alerts for specific stock
 """
 
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -30,6 +31,7 @@ from app.services.alert_service import AlertService
 
 # Note: tags are applied in main.py's include_router() call to avoid duplication
 router = APIRouter(prefix="/alerts")
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -114,24 +116,9 @@ def create_alert(
     }
     ```
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    
     try:
-        # ===== DIAGNOSTIC: Log incoming request =====
-        logger.info(
-            f"[ROUTE_DEBUG_1] Received alert creation request",
-            extra={
-                "request_dict": request.model_dump(),
-                "alert_type_raw": request.alert_type,
-                "alert_type_type": type(request.alert_type).__name__,
-                "alert_type_value": getattr(request.alert_type, 'value', str(request.alert_type)),
-            },
-        )
-        # ===== END DIAGNOSTIC =====
-        
         logger.debug(
-            f"Creating alert for user",
+            "Creating alert for user",
             extra={
                 "user_id": current_user.id,
                 "symbol": request.stock_symbol,
@@ -142,17 +129,6 @@ def create_alert(
         
         service = AlertService(db)
         alert = service.create_alert(current_user, request)
-        
-        # ===== DIAGNOSTIC: Log returned alert object =====
-        logger.info(
-            f"[ROUTE_DEBUG_2] Alert created, returned from service",
-            extra={
-                "alert_id": alert.id,
-                "alert_type_from_response": alert.alert_type,
-                "alert_type_type": type(alert.alert_type).__name__ if alert.alert_type else "None",
-            },
-        )
-        # ===== END DIAGNOSTIC =====
         
         logger.info(
             f"Alert created successfully via API",
