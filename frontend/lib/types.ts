@@ -27,6 +27,9 @@ export type LiveQuote = {
   low: number;
   volume: number;
   timestamp: string;
+  source?: string;
+  quote_type?: string;
+  price_as_of?: string | null;
 };
 
 export type LiveRibbon = {
@@ -88,6 +91,9 @@ export type StockDetails = {
   indicators: StockIndicatorSet;
   historical_data: HistoricalPoint[];
   timestamp: string;
+  source?: string;
+  quote_type?: string;
+  price_as_of?: string | null;
 };
 
 export type CombinedIndicators = {

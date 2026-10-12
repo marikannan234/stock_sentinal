@@ -435,7 +435,10 @@ export default function StockDetailPage() {
               <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <h1 className="text-[44px] font-black tracking-[-0.08em] text-white leading-none">{symbol}</h1>
-                  <p className="text-sm text-[var(--on-surface-variant)]">{symbol} live view</p>
+                  <p className="text-sm text-[var(--on-surface-variant)]">
+                    {details?.source ?? 'Market data'} · {details?.quote_type === 'daily_bar' || details?.quote_type === 'daily_close' ? 'Daily bar · may be delayed' : 'Provider quote'}
+                    {details?.price_as_of ? ` · Data as of ${new Date(details.price_as_of).toLocaleString()}` : ''}
+                  </p>
                 </div>
                 <div className="text-right">
                   <p className="font-mono text-[40px] font-medium tracking-[-0.06em] text-white leading-none">
