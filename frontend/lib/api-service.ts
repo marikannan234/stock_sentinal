@@ -134,9 +134,8 @@ export const indicatorService = {
 };
 
 export const newsService = {
-  async global(limit = 12) {
-    // Trailing slash matches the backend route; '/news' costs a 307 redirect.
-    const { data } = await api.get<NewsResponse>('/news/', { params: { limit } });
+  async global(limit = 12, refresh = false) {
+    const { data } = await api.get<NewsWithSentiment>('/news/global/sentiment', { params: { limit, refresh } });
     return data;
   },
   async bySymbol(symbol: string, limit = 12) {
