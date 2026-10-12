@@ -177,6 +177,29 @@ export default function PortfolioPage() {
           )}
         </section>
 
+        {summary && (summary.valuation_coverage_percent ?? 100) < 100 ? (
+          <SurfaceCard className="mb-6 border border-amber-400/20 bg-amber-400/[0.04] p-4">
+            <div className="flex items-start gap-3">
+              <Icon name="error_outline" className="mt-0.5 shrink-0 text-[16px] text-amber-300" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-amber-200">Some market prices are unavailable</p>
+                <p className="mt-1 text-xs leading-5 text-[var(--on-surface-variant)]">
+                  Valuation covers {summary.priced_holdings ?? 0} of {summary.total_holdings ?? 0} holdings
+                  ({(summary.valuation_coverage_percent ?? 0).toFixed(0)}%). P&amp;L below includes only priced holdings;
+                  unpriced positions are excluded until a quote is available.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { void summaryQuery.refetch(); void holdingsQuery.refetch(); void allocationQuery.refetch(); }}
+                className="shrink-0 rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/5"
+              >
+                Refresh
+              </button>
+            </div>
+          </SurfaceCard>
+        ) : null}
+
         {/* ── Add Holding Inline Form ── */}
         <div
           className="overflow-hidden transition-all duration-300"
