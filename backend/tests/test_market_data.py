@@ -1,4 +1,7 @@
 import math
+import time
+
+import pytest
 
 import pandas as pd
 
@@ -92,3 +95,12 @@ def test_live_quote_marks_yfinance_fallback_as_daily_data(monkeypatch):
     assert quote.quote_type == "daily_bar"
     assert quote.price_as_of.isoformat() == "2026-09-25T00:00:00+00:00"
     assert quote.change == 10.0
+
+
+def test_provider_timeout_returns_without_waiting_for_worker():
+    started = time.monotonic()
+
+    with pytest.raises(stocks_extended.FutureTimeoutError):
+        stocks_extended._run_with_timeout(lambda: time.sleep(0.25), timeout_seconds=0.01)
+
+    assert time.monotonic() - started < 0.15
