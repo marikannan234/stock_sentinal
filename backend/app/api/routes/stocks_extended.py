@@ -223,6 +223,9 @@ def _fetch_market_quotes_batch(symbols: List[str]) -> List[StockQuote]:
                     low=low,
                     volume=volume,
                     timestamp=timestamp,
+                    source="Yahoo Finance",
+                    quote_type="daily_close",
+                    price_as_of=pd.Timestamp(clean_frame.index[-1]).to_pydatetime(),
                 )
             )
         except Exception as e:
@@ -396,6 +399,62 @@ def _fetch_yfinance_current_price(symbol: str) -> Optional[float]:
         return None
 
 
+def _fetch_yfinance_quote_data(symbol: str) -> Optional[Dict[str, Any]]:
+    """Fetch a Yahoo Finance daily bar with its actual bar date and prior-close change."""
+    try:
+        def _fetch():
+            return yf.Ticker(quote_symbol(symbol)).history(
+                period="5d",
+                interval="1d",
+                auto_adjust=False,
+                timeout=2,
+            )
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_fetch)
+            try:
+                history = future.result(timeout=2)
+            except FutureTimeoutError:
+                logger.warning("yfinance quote data timeout for %s", symbol)
+                return None
+
+        if history is None or not hasattr(history, "empty") or history.empty or "Close" not in history.columns:
+            return None
+        history = history.dropna(subset=["Close"])
+        if history.empty:
+            return None
+
+        latest = history.iloc[-1]
+        price = float(latest.get("Close") or 0)
+        if price <= 0:
+            return None
+
+        previous_close = float(history.iloc[-2].get("Close") or 0) if len(history) > 1 else 0.0
+        change = price - previous_close if previous_close > 0 else 0.0
+        change_percent = (change / previous_close * 100) if previous_close > 0 else 0.0
+        high = float(latest.get("High") or price)
+        low = float(latest.get("Low") or price)
+        volume_raw = latest.get("Volume")
+        volume = int(volume_raw) if pd.notna(volume_raw) else 0
+
+        as_of = pd.Timestamp(history.index[-1])
+        if as_of.tzinfo is None:
+            as_of = as_of.tz_localize(timezone.utc)
+
+        return {
+            "price": price,
+            "change": round(change, 2),
+            "change_percent": round(change_percent, 2),
+            "high": high,
+            "low": low,
+            "volume": volume,
+            "price_as_of": as_of.to_pydatetime(),
+        }
+    except Exception as exc:
+        logger.warning("yfinance quote data failed for %s: %s", symbol, str(exc)[:120])
+        return None
+
+
 def _calculate_indicators(close_prices: List[float]) -> StockIndicators:
     """Calculate technical indicators from close prices."""
     if not close_prices or len(close_prices) < 2:
@@ -535,6 +594,13 @@ def _build_live_quote(symbol: str) -> StockQuote:
                 low=float(finnhub_data.get("l", 0)),
                 volume=int(finnhub_data.get("v", 0)) if finnhub_data.get("v") else 0,
                 timestamp=datetime.now(timezone.utc),
+                source="Finnhub",
+                quote_type="provider_quote",
+                price_as_of=(
+                    datetime.fromtimestamp(float(finnhub_data["t"]), tz=timezone.utc)
+                    if finnhub_data.get("t")
+                    else None
+                ),
             )
             _cache_stock_price(symbol_upper, quote)
             fetch_time = (time.time() - start_time) * 1000
@@ -543,17 +609,20 @@ def _build_live_quote(symbol: str) -> StockQuote:
     
     # STEP 3: Fallback to yfinance with 2-second timeout
     logger.debug(f"Finnhub failed, trying yfinance for {symbol_upper}...")
-    fallback_price = _fetch_yfinance_current_price(symbol_upper)
-    if fallback_price:
+    fallback_quote = _fetch_yfinance_quote_data(symbol_upper)
+    if fallback_quote:
         quote = StockQuote(
             symbol=symbol_upper,
-            price=fallback_price,
-            change=0,
-            change_percent=0,
-            high=fallback_price,
-            low=fallback_price,
-            volume=0,
+            price=fallback_quote["price"],
+            change=fallback_quote["change"],
+            change_percent=fallback_quote["change_percent"],
+            high=fallback_quote["high"],
+            low=fallback_quote["low"],
+            volume=fallback_quote["volume"],
             timestamp=datetime.now(timezone.utc),
+            source="Yahoo Finance",
+            quote_type="daily_bar",
+            price_as_of=fallback_quote["price_as_of"],
         )
         _cache_stock_price(symbol_upper, quote)
         fetch_time = (time.time() - start_time) * 1000
