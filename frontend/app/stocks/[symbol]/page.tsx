@@ -13,13 +13,11 @@ import { formatCompactNumber, formatCurrency, formatPercent } from '@/lib/sentin
 /* ─── Chart with optional indicator lines (No Flicker) ─── */
 function StockChart({
   data,
-  indicators,
   activeIndicators,
   chartType = 'line',
   onChartTypeChange,
 }: {
   data: HistoricalPoint[];
-  indicators: CombinedIndicators | null;
   activeIndicators: Set<string>;
   chartType?: 'line' | 'candlestick';
   onChartTypeChange?: (type: 'line' | 'candlestick') => void;
@@ -526,7 +524,6 @@ export default function StockDetailPage() {
                 ) : (
                   <StockChart
                     data={details?.historical_data ?? []}
-                    indicators={combined}
                     activeIndicators={activeIndicators}
                     chartType={chartType}
                     onChartTypeChange={setChartType}
