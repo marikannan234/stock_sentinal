@@ -2,14 +2,17 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelLineChart } from '@/components/sentinel/charts';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { Icon, StatChip, SurfaceCard, Skeleton } from '@/components/sentinel/primitives';
 import { useMarketSummaryQuery } from '@/hooks/queries/use-market';
-import { useGlobalNewsQuery } from '@/hooks/queries/use-news';
+import { useGlobalNewsInsightQuery, useGlobalNewsQuery } from '@/hooks/queries/use-news';
 import { usePortfolioGrowthQuery, usePortfolioSummaryQuery, type PortfolioRange } from '@/hooks/queries/use-portfolio';
 import { formatCurrency, formatPercent } from '@/lib/sentinel-utils';
+import { newsService } from '@/lib/api-service';
+import { queryKeys } from '@/lib/query-keys';
 
 const dashRanges = ['1D', '1W', '1M', '1Y'] as const;
 type DashRange = typeof dashRanges[number];
@@ -24,11 +27,14 @@ function orDash(value: number | undefined, format: (v: number) => string) {
 
 export default function DashboardPage() {
   const [activeRange, setActiveRange] = useState<DashRange>('1D');
+  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
 
   const portfolioQuery = usePortfolioSummaryQuery();
   const growthQuery = usePortfolioGrowthQuery(rangeMap[activeRange]);
   const marketQuery = useMarketSummaryQuery();
   const newsQuery = useGlobalNewsQuery();
+  const sentimentQuery = useGlobalNewsInsightQuery();
 
   const portfolio = portfolioQuery.data;
   const portfolioLoading = portfolioQuery.isPending;
@@ -40,6 +46,23 @@ export default function DashboardPage() {
     if (!market) return [];
     return [...(market.top_gainers ?? []).slice(0, 2), ...(market.top_losers ?? []).slice(0, 1)];
   }, [market]);
+
+  async function refreshDashboard() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        portfolioQuery.refetch(),
+        growthQuery.refetch(),
+        marketQuery.refetch(),
+        newsService.global(50, true)
+          .then((fresh) => queryClient.setQueryData(queryKeys.news.global(), fresh))
+          .catch(() => newsQuery.refetch()),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
     <ProtectedScreen>
@@ -101,9 +124,19 @@ export default function DashboardPage() {
               <div className="mb-6 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-white">Market Overview</h2>
-                  <p className="text-xs text-[var(--on-surface-variant)]">Live movement snapshot</p>
+                  <p className="text-xs text-[var(--on-surface-variant)]">Latest available market data</p>
                 </div>
-                <div className="flex rounded-xl bg-[var(--surface-lowest)] p-1 text-xs font-bold">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={refreshDashboard}
+                    disabled={refreshing}
+                    className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-white/5 disabled:opacity-50"
+                  >
+                    <Icon name="refresh" className={refreshing ? 'animate-spin text-[14px]' : 'text-[14px]'} />
+                    {refreshing ? 'Refreshing…' : 'Refresh data'}
+                  </button>
+                  <div className="flex rounded-xl bg-[var(--surface-lowest)] p-1 text-xs font-bold">
                   {dashRanges.map((range) => (
                     <button
                       key={range}
@@ -113,6 +146,7 @@ export default function DashboardPage() {
                       {range}
                     </button>
                   ))}
+                  </div>
                 </div>
               </div>
               <div className="rounded-2xl bg-[rgba(14,14,16,0.34)] p-4">
@@ -164,6 +198,42 @@ export default function DashboardPage() {
                   ))
                 )}
               </div>
+            </SurfaceCard>
+
+            <SurfaceCard className="p-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-bold uppercase tracking-[0.18em] text-white">Market Sentiment</h2>
+                <span className="rounded-full bg-[var(--surface-high)] px-2.5 py-1 text-[10px] font-bold text-[var(--on-surface-variant)]">
+                  {sentimentQuery.data?.analysis_count ?? 0} headlines
+                </span>
+              </div>
+              {sentimentQuery.isPending ? (
+                <Skeleton className="h-20 w-full" />
+              ) : sentimentQuery.isError || !sentimentQuery.data ? (
+                <p className="text-xs leading-5 text-[var(--on-surface-variant)]">Sentiment unavailable right now.</p>
+              ) : (
+                <>
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <p className={`text-2xl font-black tracking-tight ${
+                        sentimentQuery.data.sentiment_label === 'BULLISH'
+                          ? 'text-secondary'
+                          : sentimentQuery.data.sentiment_label === 'BEARISH'
+                            ? 'text-tertiary'
+                            : 'text-white'
+                      }`}>
+                        {sentimentQuery.data.sentiment_label}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--on-surface-variant)]">Headline mood, not a price prediction</p>
+                    </div>
+                    <p className="font-mono text-xl text-white">{Math.round(sentimentQuery.data.sentiment_score * 100)}<span className="text-xs text-[var(--on-surface-variant)]">/100</span></p>
+                  </div>
+                  <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--surface-high)]">
+                    <div className="h-full rounded-full bg-[var(--primary)] transition-all" style={{ width: `${Math.max(0, Math.min(100, sentimentQuery.data.sentiment_score * 100))}%` }} />
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-[var(--on-surface-variant)]">{sentimentQuery.data.recommendation}</p>
+                </>
+              )}
             </SurfaceCard>
 
             <SurfaceCard className="p-6">

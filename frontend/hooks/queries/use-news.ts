@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { newsService } from '@/lib/api-service';
 import { queryKeys } from '@/lib/query-keys';
-import type { NewsArticle, NewsResponse } from '@/lib/types';
+import type { NewsArticle, NewsResponse, NewsWithSentiment } from '@/lib/types';
 import { useIsAuthenticated } from './use-is-authenticated';
 
 /** One fetch serves every consumer; the dashboard shows the first few articles. */
@@ -20,6 +20,18 @@ export function useGlobalNewsQuery() {
     queryKey: queryKeys.news.global(),
     queryFn: () => newsService.global(GLOBAL_NEWS_LIMIT),
     select: selectArticles,
+    enabled: isAuthenticated,
+    staleTime: NEWS_STALE_TIME_MS,
+  });
+}
+
+/** Aggregate market mood from the same cached global news response. */
+export function useGlobalNewsInsightQuery() {
+  const isAuthenticated = useIsAuthenticated();
+  return useQuery({
+    queryKey: queryKeys.news.global(),
+    queryFn: () => newsService.global(GLOBAL_NEWS_LIMIT),
+    select: (response: NewsWithSentiment) => response.sentiment_analysis,
     enabled: isAuthenticated,
     staleTime: NEWS_STALE_TIME_MS,
   });
