@@ -49,3 +49,19 @@ def test_yfinance_price_returns_none_without_data(monkeypatch):
     monkeypatch.setattr(stocks_extended.yf, "Ticker", _fake_ticker(pd.DataFrame()))
 
     assert stocks_extended._fetch_yfinance_current_price("AAPL") is None
+
+
+def test_yfinance_quote_fallback_includes_daily_change_and_bar_date(monkeypatch):
+    monkeypatch.setattr(
+        stocks_extended.yf,
+        "Ticker",
+        _fake_ticker(_history_frame([100.0, 110.0])),
+    )
+
+    quote = stocks_extended._fetch_yfinance_quote_data("AAPL")
+
+    assert quote is not None
+    assert quote["price"] == 110.0
+    assert quote["change"] == 10.0
+    assert quote["change_percent"] == 10.0
+    assert quote["price_as_of"].date().isoformat() == "2026-09-25"
