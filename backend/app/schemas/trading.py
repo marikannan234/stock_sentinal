@@ -221,6 +221,9 @@ class StockDetailsRead(BaseModel):
     indicators: StockIndicators
     historical_data: list[StockHistoricalData]
     timestamp: datetime
+    source: str = "unknown"
+    quote_type: str = "provider_quote"
+    price_as_of: Optional[datetime] = None
 
 
 # ============================================
