@@ -145,6 +145,64 @@ async def get_global_news_endpoint(
 
 
 # ============================================
+# Global News with Sentiment Analysis
+# ============================================
+@router.get(
+    "/global/sentiment",
+    response_model=NewsWithSentimentResponse,
+    summary="Get global market news with sentiment analysis",
+)
+async def get_global_news_with_sentiment(
+    limit: int = Query(30, ge=1, le=100, description="Number of articles to return"),
+) -> NewsWithSentimentResponse:
+    """Return global market headlines with per-article and aggregate sentiment."""
+    try:
+        articles = get_global_news(use_cache=True, limit=limit)
+        if not articles:
+            return NewsWithSentimentResponse(
+                articles=[],
+                sentiment_analysis=SentimentInsight(
+                    sentiment_score=0.5,
+                    sentiment_label="NEUTRAL",
+                    recommendation="No news available for analysis",
+                    confidence=0.0,
+                    analysis_count=0,
+                ),
+                count=0,
+            )
+
+        summary = get_sentiment_summary(articles)
+        response_articles = [
+            ArticleWithSentiment(
+                title=article["title"],
+                source=article["source"],
+                url=article["url"],
+                summary=article.get("summary"),
+                image=article.get("image"),
+                published_at=article.get("published_at"),
+                sentiment=summary["articles"][idx]["sentiment"],
+                sentiment_score=summary["articles"][idx]["sentiment_score"],
+                sentiment_confidence=summary["articles"][idx]["sentiment_confidence"],
+            )
+            for idx, article in enumerate(articles)
+        ]
+        return NewsWithSentimentResponse(
+            articles=response_articles,
+            sentiment_analysis=SentimentInsight(
+                sentiment_score=summary["sentiment_score"],
+                sentiment_label=summary["sentiment_label"],
+                recommendation=summary["recommendation"],
+                confidence=summary["confidence"],
+                analysis_count=summary["analysis_count"],
+            ),
+            count=len(response_articles),
+        )
+    except Exception:
+        logger.exception("Error fetching global news with sentiment")
+        raise HTTPException(status_code=500, detail="Failed to fetch global news with sentiment")
+
+
+# ============================================
 # Stock-Specific News Endpoint
 # ============================================
 @router.get(
