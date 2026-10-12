@@ -149,6 +149,10 @@ export type PortfolioSummary = {
   day_pl: number;
   day_percent: number;
   buying_power: number;
+  priced_invested?: number;
+  priced_holdings?: number;
+  total_holdings?: number;
+  valuation_coverage_percent?: number;
 };
 
 export type PortfolioAllocation = {
