@@ -13,6 +13,7 @@ import requests
 import yfinance as yf
 from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel
+from app.services.symbols import quote_symbol
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/stock", tags=["stock"])
@@ -212,7 +213,8 @@ def fetch_stock_quote(ticker: str) -> StockQuoteResponse:
 
     try:
         url = "https://finnhub.io/api/v1/quote"
-        params = {"symbol": ticker_upper, "token": api_key}
+        provider_symbol = quote_symbol(ticker_upper)
+        params = {"symbol": provider_symbol, "token": api_key}
         data = _finnhub_get(url, params, ticker_upper)
 
         # Finnhub quote: c, d, dp, h, l, o, pc (current, change, percent change, high, low, open, previous close)
