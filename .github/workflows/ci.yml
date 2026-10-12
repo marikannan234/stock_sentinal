@@ -62,8 +62,6 @@ jobs:
         env:
           # next.config.mjs requires this value when loading the config.
           NEXT_PUBLIC_API_URL: http://localhost:8000
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:8000
 
       - name: Build
         run: npm run build
