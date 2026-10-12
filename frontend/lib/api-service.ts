@@ -5,6 +5,7 @@ import type {
   AlertItem,
   LiveQuote,
   LiveRibbon,
+  MLVolatilityEstimate,
   MarketSummary,
   NewsResponse,
   NewsWithSentiment,
@@ -102,6 +103,10 @@ export const marketService = {
   },
   async getStockDetails(symbol: string, timeRange: string) {
     const { data } = await api.get<StockDetails>(`/stocks/${symbol}`, { params: { range: timeRange } });
+    return data;
+  },
+  async getMLVolatilityEstimate(symbol: string) {
+    const { data } = await api.get<MLVolatilityEstimate>(`/stocks/${symbol}/ml-risk`);
     return data;
   },
   async getStockPrice(symbol: string) {

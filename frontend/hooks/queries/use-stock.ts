@@ -33,6 +33,18 @@ export function useStockIndicatorsQuery(symbol: string) {
   });
 }
 
+/** Evaluated next-five-session volatility estimate; can be unavailable for short history. */
+export function useStockMLVolatilityQuery(symbol: string) {
+  const isAuthenticated = useIsAuthenticated();
+  return useQuery({
+    queryKey: queryKeys.stocks.mlRisk(symbol),
+    queryFn: () => marketService.getMLVolatilityEstimate(symbol),
+    enabled: isAuthenticated && Boolean(symbol),
+    staleTime: 15 * 60 * 1000,
+    retry: 1,
+  });
+}
+
 /** Recent news for one symbol with a sentiment summary. */
 export function useStockSentimentQuery(symbol: string) {
   const isAuthenticated = useIsAuthenticated();

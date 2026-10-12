@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db_session
 from app.config import settings
 from app.services.symbols import quote_symbol
+from app.services.ml_volatility import InsufficientHistoryError, forecast_realized_volatility, forecast_to_dict
 from app.schemas.trading import (
     LiveStockRibbon,
     MarketSummary,
@@ -766,3 +767,41 @@ def get_stock_details(
         quote_type=quote.quote_type,
         price_as_of=quote.price_as_of,
     )
+
+
+
+@router.get(
+    "/{symbol}/ml-risk",
+    summary="Get evaluated machine-learning volatility estimate",
+)
+def get_ml_volatility_estimate(symbol: str) -> dict:
+    """Estimate next-five-session realized volatility with chronological holdout evaluation."""
+    normalized_symbol = symbol.upper().strip()
+    if not normalized_symbol or len(normalized_symbol) > 10 or not normalized_symbol.replace(".", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=422, detail="Invalid stock symbol.")
+
+    try:
+        history = _run_silenced_yfinance(
+            lambda: yf.Ticker(quote_symbol(normalized_symbol)).history(
+                period="2y",
+                interval="1d",
+                auto_adjust=True,
+                timeout=10,
+            )
+        )
+    except Exception as exc:
+        logger.warning("ML volatility history fetch failed for %s: %s", normalized_symbol, str(exc)[:160])
+        raise HTTPException(status_code=502, detail="Historical market data is temporarily unavailable.")
+
+    if history is None or history.empty:
+        raise HTTPException(status_code=502, detail="No historical market data is available for this symbol.")
+
+    try:
+        result = forecast_realized_volatility(history, normalized_symbol)
+    except InsufficientHistoryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        logger.exception("ML volatility estimate failed for %s", normalized_symbol)
+        raise HTTPException(status_code=500, detail="Unable to calculate the volatility estimate.")
+
+    return forecast_to_dict(result)
