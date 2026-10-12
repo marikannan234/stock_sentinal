@@ -122,33 +122,41 @@ function StockChart({
         </button>
       </div>
 
-      {/* Tooltip Display */}
-      {hoveredData && (
-        <div className="rounded-xl bg-[var(--surface-high)] px-4 py-3 border border-white/10">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs text-[var(--on-surface-variant)] uppercase font-bold">Price</p>
+      {/* Fixed-height details slot prevents the chart moving when the crosshair changes. */}
+      <div
+        className="min-h-[76px] rounded-xl border border-white/10 bg-[var(--surface-high)] px-4 py-3"
+        aria-live="polite"
+        aria-label={hoveredData ? "Selected chart point details" : "Move over the chart to inspect a point"}
+      >
+        {hoveredData ? (
+          <div className="flex min-h-[48px] items-center justify-between gap-4 overflow-x-auto">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase text-[var(--on-surface-variant)]">Price</p>
               <p className="font-mono text-lg text-white">{formatCurrency(hoveredData.close)}</p>
             </div>
-            <div>
-              <p className="text-xs text-[var(--on-surface-variant)] uppercase font-bold">Time</p>
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase text-[var(--on-surface-variant)]">Time</p>
               <p className="font-mono text-sm text-white">{hoveredData.timestamp}</p>
             </div>
             {priceChange !== null && priceChangePercent !== null && (
-              <div>
-                <p className="text-xs text-[var(--on-surface-variant)] uppercase font-bold">Change</p>
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase text-[var(--on-surface-variant)]">Change</p>
                 <p className={`font-mono text-lg ${priceChangePercent >= 0 ? 'text-secondary' : 'text-tertiary'}`}>
                   {priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%
                 </p>
               </div>
             )}
-            <div>
-              <p className="text-xs text-[var(--on-surface-variant)] uppercase font-bold">Volume</p>
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase text-[var(--on-surface-variant)]">Volume</p>
               <p className="font-mono text-sm text-white">{formatCompactNumber(hoveredData.volume)}</p>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="flex min-h-[48px] items-center text-sm text-[var(--on-surface-variant)]">
+            Move over the chart to inspect price, date, change and volume.
+          </div>
+        )}
+      </div>
 
       <svg 
         className="h-[320px] w-full rounded-2xl bg-[rgba(12,22,28,0.65)] cursor-crosshair border border-white/5" 
@@ -285,85 +293,78 @@ function StockChart({
   );
 }
 
-/* ─── Risk Gauge (RSI-based) ─── */
-function RiskGauge({ rsiValue }: { rsiValue: number }) {
-  // RSI-based risk mapping:
-  // RSI < 30 → LOW risk (20%)
-  // RSI 30-70 → MEDIUM risk (50%)
-  // RSI > 70 → HIGH risk (80%)
-  
-  let riskPercent: number;
-  let riskLabel: string;
-  let riskColor: string;
+/* ─── Historical volatility risk gauge ─── */
+function RiskGauge({ data }: { data: HistoricalPoint[] }) {
+  // Estimate annualized volatility from the observed close-to-close returns.
+  // Normalize by elapsed calendar time so weekly/monthly chart ranges do not
+  // get treated as if every bar represented one trading day.
+  const observations = data
+    .filter((point) => Number.isFinite(point.close) && point.close > 0 && Number.isFinite(Date.parse(point.timestamp)))
+    .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
 
-  if (rsiValue < 30) {
-    riskPercent = 20;
-    riskLabel = 'LOW';
-    riskColor = '#4edea3';
-  } else if (rsiValue > 70) {
-    riskPercent = 80;
-    riskLabel = 'HIGH';
-    riskColor = '#ffb3ad';
-  } else {
-    riskPercent = 50;
-    riskLabel = 'MEDIUM';
-    riskColor = '#f9c74f';
+  const returns: number[] = [];
+  const intervals: number[] = [];
+  for (let index = 1; index < observations.length; index += 1) {
+    const previous = observations[index - 1];
+    const current = observations[index];
+    const elapsedDays = (Date.parse(current.timestamp) - Date.parse(previous.timestamp)) / 86400000;
+    if (elapsedDays <= 0) continue;
+    returns.push(Math.log(current.close / previous.close));
+    intervals.push(elapsedDays);
   }
 
-  // Needle rotation: 0% = -90deg, 100% = +90deg
+  if (returns.length < 5) {
+    return (
+      <div className="flex min-h-[180px] flex-col items-center justify-center text-center">
+        <p className="text-lg font-black text-[var(--on-surface-variant)]">Not enough data</p>
+        <p className="mt-2 max-w-[220px] text-xs text-[var(--on-surface-variant)]">
+          At least six valid closing prices are needed to estimate historical volatility.
+        </p>
+      </div>
+    );
+  }
+
+  const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+  const variance = returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (returns.length - 1);
+  const averageIntervalDays = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
+  const annualizedVolatility = Math.sqrt(Math.max(variance, 0)) * Math.sqrt(252 / Math.max(averageIntervalDays, 1));
+  const volatilityPercent = annualizedVolatility * 100;
+  const riskPercent = Math.max(0, Math.min(100, (volatilityPercent / 80) * 100));
+
+  const riskLabel = volatilityPercent < 20 ? "LOW" : volatilityPercent < 40 ? "MODERATE" : "HIGH";
+  const riskColor = volatilityPercent < 20 ? "#4edea3" : volatilityPercent < 40 ? "#f9c74f" : "#ffb3ad";
   const needleAngle = -90 + (riskPercent / 100) * 180;
-  
   const rad = (needleAngle * Math.PI) / 180;
   const centerX = 50;
   const centerY = 58;
-  const needleLength = 38;
+  const needleLength = 34;
   const nx = centerX + needleLength * Math.cos(rad);
   const ny = centerY + needleLength * Math.sin(rad);
+  const arcEndAngle = Math.PI - (riskPercent / 100) * Math.PI;
+  const arcX = centerX + 38 * Math.cos(arcEndAngle);
+  const arcY = centerY - 38 * Math.sin(arcEndAngle);
+  const largeArc = riskPercent > 50 ? 1 : 0;
 
   return (
-    <div className="flex flex-col items-center gap-3">
-      <svg viewBox="0 0 100 70" className="w-full max-w-[220px]" style={{ transform: 'scaleX(1)' }}>
-        {/* Gauge arc background (gray) */}
-        <path
-          d="M 12,58 A 38,38 0 0,1 88,58"
-          fill="none"
-          stroke="#2a2a2c"
-          strokeWidth="8"
-          strokeLinecap="round"
-        />
-        
-        {/* Colored arc (0-100) */}
-        <path
-          d={`M 12,58 A 38,38 0 0,1 ${12 + (riskPercent / 100) * 76},${58 - (riskPercent / 100) * 38 * Math.sin(Math.PI / 2) * 2}`}
-          fill="none"
-          stroke={riskColor}
-          strokeWidth="8"
-          strokeLinecap="round"
-          opacity="0.8"
-        />
-        
-        {/* Needle (pivot point + line + circle) */}
-        <line
-          x1={centerX}
-          y1={centerY}
-          x2={nx}
-          y2={ny}
-          stroke={riskColor}
-          strokeWidth="3"
-          strokeLinecap="round"
-          opacity="0.9"
-        />
-        <circle cx={centerX} cy={centerY} r="4" fill={riskColor} opacity="0.95" />
-        
-        {/* Labels */}
-        <text x="15" y="72" fontSize="9" fill="rgba(255,255,255,0.3)" fontFamily="monospace">LOW</text>
-        <text x="46" y="72" fontSize="9" fill="rgba(255,255,255,0.3)" fontFamily="monospace" textAnchor="middle">MID</text>
-        <text x="80" y="72" fontSize="9" fill="rgba(255,255,255,0.3)" fontFamily="monospace" textAnchor="end">HIGH</text>
+    <div className="flex flex-col items-center gap-2">
+      <svg viewBox="0 0 100 70" className="w-full max-w-[220px]" role="img" aria-label={`Estimated annualized volatility ${volatilityPercent.toFixed(1)} percent, ${riskLabel} risk`}>
+        <path d="M 12,58 A 38,38 0 0,1 88,58" fill="none" stroke="#2a2a2c" strokeWidth="8" strokeLinecap="round" />
+        {riskPercent > 0 && (
+          <path d={`M 12,58 A 38,38 0 ${largeArc} 1 ${arcX},${arcY}`} fill="none" stroke={riskColor} strokeWidth="8" strokeLinecap="round" opacity="0.9" />
+        )}
+        <line x1={centerX} y1={centerY} x2={nx} y2={ny} stroke={riskColor} strokeWidth="3" strokeLinecap="round" />
+        <circle cx={centerX} cy={centerY} r="4" fill={riskColor} />
+        <text x="12" y="69" fontSize="8" fill="rgba(255,255,255,0.45)">0%</text>
+        <text x="88" y="69" fontSize="8" textAnchor="end" fill="rgba(255,255,255,0.45)">80%+</text>
       </svg>
-      
       <div className="text-center">
         <p className="text-2xl font-black" style={{ color: riskColor }}>{riskLabel}</p>
-        <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--on-surface-variant)]">Risk Level (RSI: {rsiValue.toFixed(0)})</p>
+        <p className="text-xs text-[var(--on-surface-variant)]">
+          Estimated annualized volatility: {volatilityPercent.toFixed(1)}%
+        </p>
+        <p className="mt-1 max-w-[260px] text-[10px] leading-relaxed text-[var(--on-surface-variant)]">
+          Based on historical close-to-close returns, not a prediction of future loss. Low: under 20%; moderate: 20–40%; high: 40% or more.
+        </p>
       </div>
     </div>
   );
@@ -570,7 +571,7 @@ export default function StockDetailPage() {
               {/* Risk Gauge (RSI-based) */}
               <SurfaceCard className="p-6 text-center">
                 <p className="mb-4 text-xs font-black uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Market Risk Analysis</p>
-                <RiskGauge rsiValue={combined?.rsi?.rsi ?? 50} />
+                <RiskGauge data={details?.historical_data ?? []} />
                 {sentiment?.sentiment_analysis?.recommendation && (
                   <p className="mt-4 text-sm leading-7 text-[var(--on-surface-variant)]">
                     {sentiment.sentiment_analysis.recommendation}
