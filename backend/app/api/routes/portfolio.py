@@ -51,13 +51,17 @@ class PortfolioSellBody(BaseModel):
 
 
 class PortfolioSummaryResponse(BaseModel):
-    total_invested: float = Field(..., description="Sum of (quantity * average_price) for all holdings")
-    current_value: float = Field(..., description="Sum of (quantity * current_price) for all holdings")
-    total_pl: float = Field(..., description="Current value minus total invested")
-    percent_pl: float = Field(..., description="(total_pl / total_invested) * 100, or 0 if no holdings")
-    day_pl: float = Field(..., description="Today's profit/loss across the portfolio")
-    day_percent: float = Field(..., description="Today's profit/loss percentage")
+    total_invested: float = Field(..., description="Total cost basis across all holdings")
+    current_value: float = Field(..., description="Market value of holdings with an available quote")
+    total_pl: float = Field(..., description="P/L for holdings with an available market quote")
+    percent_pl: float = Field(..., description="P/L percentage for holdings with an available market quote")
+    day_pl: float = Field(..., description="Today's P/L for holdings with available quote data")
+    day_percent: float = Field(..., description="Today's P/L percentage for holdings with available quote data")
     buying_power: float = Field(..., description="Available paper-trading cash")
+    priced_invested: float = Field(0.0, description="Cost basis of holdings with an available market quote")
+    priced_holdings: int = Field(0, description="Number of holdings with an available market quote")
+    total_holdings: int = Field(0, description="Total number of holdings")
+    valuation_coverage_percent: float = Field(100.0, description="Percentage of holdings with available market quotes")
 
 
 class AllocationItem(BaseModel):
@@ -218,11 +222,17 @@ def get_portfolio_summary(
     logger.info("Portfolio summary requested", extra={"user_id": current_user.id})
     holdings = _enriched_holdings(db, current_user.id)
     total_invested = sum(float(holding.invested_amount or 0) for holding in holdings)
-    current_value = sum(float(holding.current_value or 0) for holding in holdings)
-    day_pl = sum(float(holding.day_change or 0) for holding in holdings)
-    total_pl = current_value - total_invested
-    percent_pl = (total_pl / total_invested * 100) if total_invested > 0 else 0.0
-    day_percent = (day_pl / (current_value - day_pl) * 100) if (current_value - day_pl) > 0 else 0.0
+    priced_holdings = [holding for holding in holdings if holding.current_value is not None]
+    priced_invested = sum(float(holding.invested_amount or 0) for holding in priced_holdings)
+    current_value = sum(float(holding.current_value or 0) for holding in priced_holdings)
+    day_pl = sum(float(holding.day_change or 0) for holding in priced_holdings if holding.day_change is not None)
+    total_pl = current_value - priced_invested
+    percent_pl = (total_pl / priced_invested * 100) if priced_invested > 0 else 0.0
+    day_base = current_value - day_pl
+    day_percent = (day_pl / day_base * 100) if day_base > 0 else 0.0
+    priced_count = len(priced_holdings)
+    total_count = len(holdings)
+    valuation_coverage = (priced_count / total_count * 100) if total_count else 100.0
 
     return PortfolioSummaryResponse(
         total_invested=round(total_invested, 2),
@@ -232,6 +242,10 @@ def get_portfolio_summary(
         day_pl=round(day_pl, 2),
         day_percent=round(day_percent, 2),
         buying_power=float(current_user.cash_balance),
+        priced_invested=round(priced_invested, 2),
+        priced_holdings=priced_count,
+        total_holdings=total_count,
+        valuation_coverage_percent=round(valuation_coverage, 2),
     )
 
 
@@ -444,11 +458,17 @@ def get_portfolio_dashboard(
         
         # Calculate summary from holdings
         total_invested = sum(float(holding.invested_amount or 0) for holding in holdings)
-        current_value = sum(float(holding.current_value or 0) for holding in holdings)
-        day_pl = sum(float(holding.day_change or 0) for holding in holdings)
-        total_pl = current_value - total_invested
-        percent_pl = (total_pl / total_invested * 100) if total_invested > 0 else 0.0
-        day_percent = (day_pl / (current_value - day_pl) * 100) if (current_value - day_pl) > 0 else 0.0
+        priced_holdings = [holding for holding in holdings if holding.current_value is not None]
+        priced_invested = sum(float(holding.invested_amount or 0) for holding in priced_holdings)
+        current_value = sum(float(holding.current_value or 0) for holding in priced_holdings)
+        day_pl = sum(float(holding.day_change or 0) for holding in priced_holdings if holding.day_change is not None)
+        total_pl = current_value - priced_invested
+        percent_pl = (total_pl / priced_invested * 100) if priced_invested > 0 else 0.0
+        day_base = current_value - day_pl
+        day_percent = (day_pl / day_base * 100) if day_base > 0 else 0.0
+        priced_count = len(priced_holdings)
+        total_count = len(holdings)
+        valuation_coverage = (priced_count / total_count * 100) if total_count else 100.0
         
         summary = PortfolioSummaryResponse(
             total_invested=round(total_invested, 2),
@@ -458,6 +478,10 @@ def get_portfolio_dashboard(
             day_pl=round(day_pl, 2),
             day_percent=round(day_percent, 2),
             buying_power=float(current_user.cash_balance),
+            priced_invested=round(priced_invested, 2),
+            priced_holdings=priced_count,
+            total_holdings=total_count,
+            valuation_coverage_percent=round(valuation_coverage, 2),
         )
         
         # Calculate allocation from holdings
@@ -499,6 +523,10 @@ def get_portfolio_dashboard(
                 day_pl=0.0,
                 day_percent=0.0,
                 buying_power=float(current_user.cash_balance),
+                priced_invested=0.0,
+                priced_holdings=0,
+                total_holdings=0,
+                valuation_coverage_percent=0.0,
             ),
             allocation=PortfolioAllocationResponse(
                 total_value=0.0,
