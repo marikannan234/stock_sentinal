@@ -236,6 +236,9 @@ class StockQuote(BaseModel):
     low: float
     volume: int
     timestamp: datetime
+    source: str = "unknown"
+    quote_type: str = "provider_quote"
+    price_as_of: Optional[datetime] = None
 
 
 class LiveStockRibbon(BaseModel):
