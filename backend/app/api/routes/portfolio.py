@@ -216,8 +216,8 @@ def get_portfolio_summary(
     db: Session = Depends(get_db_session),
 ) -> PortfolioSummaryResponse:
     """
-    Return total invested, current value, and total P/L for the user's portfolio.
-    Uses live quotes from Finnhub; falls back to average price if a quote cannot be fetched.
+    Return portfolio valuation and P/L for holdings with valid market quotes.
+    Total invested includes all holdings; P/L is calculated only for priced holdings.
     """
     logger.info("Portfolio summary requested", extra={"user_id": current_user.id})
     holdings = _enriched_holdings(db, current_user.id)
