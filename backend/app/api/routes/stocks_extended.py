@@ -762,4 +762,7 @@ def get_stock_details(
         indicators=indicators,
         historical_data=historical_data,
         timestamp=datetime.now(timezone.utc),
+        source=quote.source,
+        quote_type=quote.quote_type,
+        price_as_of=quote.price_as_of,
     )
