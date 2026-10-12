@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db_session
 from app.config import settings
+from app.services.symbols import quote_symbol
 from app.schemas.trading import (
     LiveStockRibbon,
     MarketSummary,
@@ -328,7 +329,7 @@ def _fetch_finnhub_quote(symbol: str) -> Optional[Dict[str, Any]]:
             return None
 
         url = "https://finnhub.io/api/v1/quote"
-        params = {"symbol": symbol.upper(), "token": api_key}
+        params = {"symbol": quote_symbol(symbol), "token": api_key}
         
         # Use ThreadPoolExecutor with timeout to ENFORCE max 2 seconds
         with ThreadPoolExecutor(max_workers=1) as executor:
@@ -359,7 +360,7 @@ def _fetch_yfinance_current_price(symbol: str) -> Optional[float]:
     try:
         # Use ThreadPoolExecutor with timeout to ENFORCE max 2 seconds
         def _fetch():
-            return yf.Ticker(symbol.upper()).history(
+            return yf.Ticker(quote_symbol(symbol)).history(
                 period="1d",
                 interval="1d",
                 auto_adjust=False,
