@@ -7,7 +7,7 @@ import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard, Skeleton } from '@/components/sentinel/primitives';
 import { useStockDetailsQuery, useStockIndicatorsQuery, useStockSentimentQuery, useStockMLVolatilityQuery } from '@/hooks/queries/use-stock';
-import type { CombinedIndicators, HistoricalPoint } from '@/lib/types';
+import type { HistoricalPoint } from '@/lib/types';
 import { formatCompactNumber, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
 /* ─── Chart with optional indicator lines (No Flicker) ─── */
@@ -535,7 +535,7 @@ export default function StockDetailPage() {
                   <div className="mt-3 flex gap-4 text-[10px] font-black uppercase tracking-[0.15em] animate-fadeIn transition-all duration-300">
                     {activeIndicators.has('SMA') && <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-5 bg-[#adc6ff]" />SMA {combined?.sma?.sma?.toFixed(2)}</span>}
                     {activeIndicators.has('EMA') && <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-5 bg-[#ffb3ad]" />EMA {combined?.ema?.ema?.toFixed(2)}</span>}
-                    {activeIndicators.has('RSI') && <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-5 bg-[#f9c74f]" />RSI {combined?.rsi?.rsi?.toFixed(1)}</span>}
+                    {activeIndicators.has('RSI') && <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-5 bg-[#c4a7ff]" />RSI {combined?.rsi?.rsi?.toFixed(1)}</span>}
                   </div>
                 )}
               </SurfaceCard>
