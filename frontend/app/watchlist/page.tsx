@@ -5,7 +5,7 @@ import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard } from '@/components/sentinel/primitives';
 import { useMarketSummaryQuery } from '@/hooks/queries/use-market';
-import { useAddToWatchlistMutation, useStockPriceQueries, useWatchlistQuery } from '@/hooks/queries/use-watchlist';
+import { useAddToWatchlistMutation, useRemoveFromWatchlistMutation, useStockPriceQueries, useWatchlistQuery } from '@/hooks/queries/use-watchlist';
 import { getErrorMessage } from '@/lib/api-service';
 import { formatCompactNumber, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
@@ -20,6 +20,7 @@ export default function WatchlistPage() {
   const moversFallback = (empty: string) =>
     marketQuery.isPending ? 'Loading…' : marketQuery.isError ? 'Market data unavailable' : empty;
   const addMutation = useAddToWatchlistMutation();
+  const removeMutation = useRemoveFromWatchlistMutation();
 
   function handleAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,12 +53,13 @@ export default function WatchlistPage() {
                   <th className="px-6 py-4 text-left">Price</th>
                   <th className="px-6 py-4 text-left">Change %</th>
                   <th className="px-6 py-4 text-left">Volume</th>
+                  <th className="px-6 py-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {watchlistQuery.isPending ? (
                   <tr className="border-t border-white/5">
-                    <td colSpan={4} className="px-6 py-5 text-sm text-[var(--on-surface-variant)]">Loading watchlist…</td>
+                    <td colSpan={5} className="px-6 py-5 text-sm text-[var(--on-surface-variant)]">Loading watchlist…</td>
                   </tr>
                 ) : watchlistQuery.isError ? (
                   <tr className="border-t border-white/5">
@@ -82,6 +84,14 @@ export default function WatchlistPage() {
                         <td className="px-6 py-5 font-mono text-white">{quote ? formatCurrency(quote.price) : '—'}</td>
                         <td className={`px-6 py-5 font-mono ${(quote?.change_percent ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary'}`}>{quote ? formatPercent(quote.change_percent) : '—'}</td>
                         <td className="px-6 py-5 font-mono text-[var(--on-surface-variant)]">{quote ? formatCompactNumber(quote.volume) : '—'}</td>
+                        <td className="px-6 py-5 text-right">
+                          <button type="button" disabled={removeMutation.isPending}
+                            onClick={() => { if (window.confirm('Remove ' + symbol + ' from your watchlist?')) removeMutation.mutate(symbol); }}
+                            className="rounded-lg border border-tertiary/30 px-3 py-2 text-xs font-semibold text-tertiary hover:bg-tertiary/10 disabled:opacity-50"
+                            aria-label={'Remove ' + symbol + ' from watchlist'}>
+                            Remove
+                          </button>
+                        </td>
                       </tr>
                     );
                   })
