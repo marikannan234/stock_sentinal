@@ -136,45 +136,61 @@ def _classify_asset(ticker: str) -> str:
 
 
 def _enrich_holding(holding: HoldingItem) -> HoldingItem:
-    """Enrich holding with current price data. Gracefully falls back on error."""
+    """Enrich a holding with a valid market quote without inventing prices."""
     quantity = float(holding.quantity or 0)
     average_price = float(holding.average_price or 0)
     invested_amount = quantity * average_price
 
-    current_price = average_price
-    previous_close = average_price
-    
+    current_price: float | None = None
+    previous_close: float | None = None
+
     try:
         quote = fetch_stock_quote(holding.ticker)
-        current_price = float(quote.price or average_price)
-        previous_close = float(quote.previous_close or current_price)
+        quote_price = float(quote.price or 0)
+        quote_previous_close = float(quote.previous_close or 0)
+        if quote_price > 0:
+            current_price = quote_price
+            previous_close = quote_previous_close if quote_previous_close > 0 else None
+        else:
+            logger.warning(
+                "Market quote unavailable for %s; omitting current valuation rather than using cost basis",
+                holding.ticker,
+            )
     except Exception as e:
-        # Graceful fallback: use average price on any error
-        logger.warning(f"Error fetching quote for {holding.ticker}: {e}")
-        current_price = average_price
-        previous_close = average_price
+        logger.warning("Error fetching quote for %s: %s", holding.ticker, e)
 
-    current_value = quantity * current_price
-    pl_amount = current_value - invested_amount
-    pl_percent = (pl_amount / invested_amount * 100) if invested_amount > 0 else 0.0
-    day_change = quantity * (current_price - previous_close)
-    day_percent = ((current_price - previous_close) / previous_close * 100) if previous_close > 0 else 0.0
+    current_value = quantity * current_price if current_price is not None else None
+    pl_amount = current_value - invested_amount if current_value is not None else None
+    pl_percent = (
+        pl_amount / invested_amount * 100
+        if pl_amount is not None and invested_amount > 0
+        else None
+    )
+    day_change = (
+        quantity * (current_price - previous_close)
+        if current_price is not None and previous_close is not None
+        else None
+    )
+    day_percent = (
+        (current_price - previous_close) / previous_close * 100
+        if current_price is not None and previous_close is not None and previous_close > 0
+        else None
+    )
 
     return HoldingItem(
         ticker=holding.ticker,
         quantity=holding.quantity,
         average_price=holding.average_price,
-        current_price=round(current_price, 2),
-        current_value=round(current_value, 2),
+        current_price=round(current_price, 2) if current_price is not None else None,
+        current_value=round(current_value, 2) if current_value is not None else None,
         invested_amount=round(invested_amount, 2),
-        pl_amount=round(pl_amount, 2),
-        pl_percent=round(pl_percent, 2),
-        day_change=round(day_change, 2),
-        day_change_percent=round(day_percent, 2),
+        pl_amount=round(pl_amount, 2) if pl_amount is not None else None,
+        pl_percent=round(pl_percent, 2) if pl_percent is not None else None,
+        day_change=round(day_change, 2) if day_change is not None else None,
+        day_change_percent=round(day_percent, 2) if day_percent is not None else None,
         name=holding.name or _resolve_asset_name(holding.ticker),
         asset_class=holding.asset_class or _classify_asset(holding.ticker),
     )
-
 
 def _enriched_holdings(db: Session, user_id: int) -> list[HoldingItem]:
     return [_enrich_holding(holding) for holding in _holdings_list(db, user_id)]
