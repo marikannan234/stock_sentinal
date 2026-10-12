@@ -46,10 +46,6 @@ export const config = {
   WS_BASE_URL: `${wsOrigin}/ws`,
   API_TIMEOUT_MS: 10_000,
 
-  // Legacy values still read by lib/store-v2.ts; removed together with it.
-  CACHE_TTL: 300_000,
-  STORAGE_PREFIX: 'stocksentinel_',
-  SYNC_ACROSS_TABS: true,
 } as const;
 
 /** Console logger; debug/info only print in development. */

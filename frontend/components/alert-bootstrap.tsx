@@ -2,21 +2,15 @@
 
 /**
  * Alert notification bootstrap component.
- * Initializes alert WebSocket behavior only after the app mounts in the browser.
- * 
- * IMPORTANT: This is the ONLY place WebSocket connections should be initialized.
- * All alert notifications are handled through the singleton WebSocket manager.
+ * Global toast container. Alert WebSocket push stays disabled until the endpoint
+ * authenticates users and scopes notifications to the owning account.
  */
 
 import { useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { useAlertsWS } from '@/hooks/useAlertsWS';
 
 function AlertRuntime() {
-  // Initialize WebSocket subscription (runs only once on mount)
-  useAlertsWS();
-
   return (
     <Toaster
       position="top-right"
