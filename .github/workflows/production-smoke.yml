@@ -1,0 +1,46 @@
+name: Production Smoke Check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-smoke-check
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Verify production endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check frontend responds
+        run: |
+          curl --fail --silent --show-error --location \
+            --retry 5 --retry-all-errors --retry-delay 5 \
+            --max-time 20 \
+            --output /dev/null \
+            --write-out 'Frontend HTTP %{http_code}; total %{time_total}s\n' \
+            https://stock-sentinal-azure.vercel.app/
+
+      - name: Check backend health endpoint
+        run: |
+          response="$(curl --fail --silent --show-error --location \
+            --retry 5 --retry-all-errors --retry-delay 5 \
+            --max-time 20 \
+            https://stock-sentinal-api.onrender.com/api/health/)"
+          echo "$response"
+          python -c 'import json,sys; data=json.loads(sys.stdin.read()); assert data.get("status") == "ok", data; assert data.get("healthy") is True, data' <<< "$response"
+
+      - name: Check backend OpenAPI is served
+        run: |
+          curl --fail --silent --show-error --location \
+            --retry 5 --retry-all-errors --retry-delay 5 \
+            --max-time 20 \
+            --output /dev/null \
+            --write-out 'OpenAPI HTTP %{http_code}; total %{time_total}s\n' \
+            https://stock-sentinal-api.onrender.com/openapi.json
