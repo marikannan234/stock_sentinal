@@ -6,7 +6,7 @@ import { useState, useRef } from 'react';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard, Skeleton } from '@/components/sentinel/primitives';
-import { useStockDetailsQuery, useStockIndicatorsQuery, useStockSentimentQuery } from '@/hooks/queries/use-stock';
+import { useStockDetailsQuery, useStockIndicatorsQuery, useStockSentimentQuery, useStockMLVolatilityQuery } from '@/hooks/queries/use-stock';
 import type { CombinedIndicators, HistoricalPoint } from '@/lib/types';
 import { formatCompactNumber, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
@@ -382,6 +382,7 @@ export default function StockDetailPage() {
   const details = detailsQuery.data;
   const combined = useStockIndicatorsQuery(symbol).data ?? null;
   const sentiment = useStockSentimentQuery(symbol).data;
+  const mlRiskQuery = useStockMLVolatilityQuery(symbol);
   const loadingDetails = detailsQuery.isPending;
   const error = detailsQuery.isError ? 'Failed to load stock data. Please try again.' : '';
 
@@ -556,6 +557,58 @@ export default function StockDetailPage() {
                     {sentiment.sentiment_analysis.recommendation}
                   </p>
                 )}
+              </SurfaceCard>
+
+              {/* Evaluated ML volatility estimate */}
+              <SurfaceCard className="p-6">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">ML Volatility Outlook</h3>
+                    <p className="mt-1 text-xs text-[var(--on-surface-variant)]">Next 5 trading sessions · Random Forest</p>
+                  </div>
+                  <span className="rounded-full border border-[var(--primary)]/30 bg-[var(--primary)]/10 px-2 py-1 text-[10px] font-bold uppercase text-[var(--primary)]">Beta</span>
+                </div>
+                {mlRiskQuery.isPending ? (
+                  <div className="space-y-3" aria-label="Loading machine learning estimate">
+                    <div className="h-8 w-32 animate-pulse rounded bg-[var(--surface-high)]" />
+                    <div className="h-3 w-full animate-pulse rounded bg-[var(--surface-high)]" />
+                    <div className="h-3 w-4/5 animate-pulse rounded bg-[var(--surface-high)]" />
+                  </div>
+                ) : mlRiskQuery.isError ? (
+                  <div className="rounded-xl bg-[var(--surface-lowest)] p-3">
+                    <p className="text-sm font-semibold text-white">Estimate unavailable</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--on-surface-variant)]">
+                      This model needs enough clean daily history. No prediction is shown when the data is insufficient.
+                    </p>
+                    <button onClick={() => mlRiskQuery.refetch()} className="mt-3 text-xs font-bold text-[var(--primary)]">Try again</button>
+                  </div>
+                ) : mlRiskQuery.data ? (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-3xl font-black text-white">{mlRiskQuery.data.predicted_volatility_percent.toFixed(2)}%</p>
+                      <p className="mt-1 text-xs text-[var(--on-surface-variant)]">Estimated annualized volatility for the next 5 sessions</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl bg-[var(--surface-lowest)] p-3">
+                        <p className="text-[10px] uppercase tracking-wide text-[var(--on-surface-variant)]">Model MAE</p>
+                        <p className="mt-1 font-mono text-white">{mlRiskQuery.data.model_mae_percent.toFixed(2)} pp</p>
+                      </div>
+                      <div className="rounded-xl bg-[var(--surface-lowest)] p-3">
+                        <p className="text-[10px] uppercase tracking-wide text-[var(--on-surface-variant)]">Baseline MAE</p>
+                        <p className="mt-1 font-mono text-white">{mlRiskQuery.data.baseline_mae_percent.toFixed(2)} pp</p>
+                      </div>
+                    </div>
+                    <p className={`text-xs font-semibold ${mlRiskQuery.data.model_beats_baseline ? 'text-secondary' : 'text-tertiary'}`}>
+                      {mlRiskQuery.data.model_beats_baseline
+                        ? 'Beat the simple baseline on the time-ordered holdout.'
+                        : 'Did not beat the simple baseline on the holdout; treat this model as experimental.'}
+                    </p>
+                    <p className="text-xs leading-5 text-[var(--on-surface-variant)]">
+                      Evaluated on {mlRiskQuery.data.holdout_observations} later observations · {mlRiskQuery.data.model_version}
+                    </p>
+                    <p className="text-[10px] leading-4 text-[var(--on-surface-variant)]">{mlRiskQuery.data.caveat}</p>
+                  </div>
+                ) : null}
               </SurfaceCard>
 
               {/* Execution Panel */}
