@@ -27,7 +27,6 @@ function StockChart({
   // Use useRef instead of useState to avoid re-renders on hover
   const hoveredIndexRef = useRef<number | null>(null);
   const [, forceUpdate] = useState(0);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   if (!data.length)
     return (
@@ -122,33 +121,35 @@ function StockChart({
         </button>
       </div>
 
-      {/* Tooltip Display */}
-      {hoveredData && (
-        <div className="rounded-xl bg-[var(--surface-high)] px-4 py-3 border border-white/10">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs text-[var(--on-surface-variant)] uppercase font-bold">Price</p>
-              <p className="font-mono text-lg text-white">{formatCurrency(hoveredData.close)}</p>
+      {/* Keep a fixed-height tooltip slot so hover updates never move the chart. */}
+      <div className="h-[76px] overflow-hidden rounded-xl border border-white/10 bg-[var(--surface-high)] px-4 py-3" aria-live="polite">
+        {hoveredData ? (
+          <div className="grid h-full grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase text-[var(--on-surface-variant)]">Price</p>
+              <p className="truncate font-mono text-lg text-white">{formatCurrency(hoveredData.close)}</p>
             </div>
-            <div>
-              <p className="text-xs text-[var(--on-surface-variant)] uppercase font-bold">Time</p>
-              <p className="font-mono text-sm text-white">{hoveredData.timestamp}</p>
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase text-[var(--on-surface-variant)]">Time</p>
+              <p className="truncate font-mono text-sm text-white">{hoveredData.timestamp}</p>
             </div>
-            {priceChange !== null && priceChangePercent !== null && (
-              <div>
-                <p className="text-xs text-[var(--on-surface-variant)] uppercase font-bold">Change</p>
-                <p className={`font-mono text-lg ${priceChangePercent >= 0 ? 'text-secondary' : 'text-tertiary'}`}>
-                  {priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%
-                </p>
-              </div>
-            )}
-            <div>
-              <p className="text-xs text-[var(--on-surface-variant)] uppercase font-bold">Volume</p>
-              <p className="font-mono text-sm text-white">{formatCompactNumber(hoveredData.volume)}</p>
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase text-[var(--on-surface-variant)]">Change from start</p>
+              <p className={`truncate font-mono text-lg ${(priceChangePercent ?? 0) >= 0 ? 'text-secondary' : 'text-tertiary'}`}>
+                {priceChangePercent === null ? '—' : `${priceChangePercent >= 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%`}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase text-[var(--on-surface-variant)]">Volume</p>
+              <p className="truncate font-mono text-sm text-white">{formatCompactNumber(hoveredData.volume)}</p>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="flex h-full items-center text-xs text-[var(--on-surface-variant)]">
+            Hover over the chart to inspect a price point.
+          </div>
+        )}
+      </div>
 
       <svg 
         className="h-[320px] w-full rounded-2xl bg-[rgba(12,22,28,0.65)] cursor-crosshair border border-white/5" 
@@ -285,86 +286,65 @@ function StockChart({
   );
 }
 
-/* ─── Risk Gauge (RSI-based) ─── */
-function RiskGauge({ rsiValue }: { rsiValue: number }) {
-  // RSI-based risk mapping:
-  // RSI < 30 → LOW risk (20%)
-  // RSI 30-70 → MEDIUM risk (50%)
-  // RSI > 70 → HIGH risk (80%)
-  
-  let riskPercent: number;
-  let riskLabel: string;
-  let riskColor: string;
-
-  if (rsiValue < 30) {
-    riskPercent = 20;
-    riskLabel = 'LOW';
-    riskColor = '#4edea3';
-  } else if (rsiValue > 70) {
-    riskPercent = 80;
-    riskLabel = 'HIGH';
-    riskColor = '#ffb3ad';
-  } else {
-    riskPercent = 50;
-    riskLabel = 'MEDIUM';
-    riskColor = '#f9c74f';
+/* ─── Transparent historical risk snapshot (not an ML prediction) ─── */
+function RiskGauge({ data }: { data: HistoricalPoint[] }) {
+  const closes = data.map((point) => point.close).filter((price) => Number.isFinite(price) && price > 0);
+  if (closes.length < 3) {
+    return <p className="text-sm text-[var(--on-surface-variant)]">Not enough historical prices to estimate volatility and drawdown.</p>;
   }
 
-  // Needle rotation: 0% = -90deg, 100% = +90deg
-  const needleAngle = -90 + (riskPercent / 100) * 180;
-  
+  const returns = closes.slice(1).flatMap((price, index) => {
+    const previous = closes[index];
+    return previous > 0 ? [((price - previous) / previous) * 100] : [];
+  });
+  const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+  const variance = returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / returns.length;
+  const volatilityPct = Math.sqrt(variance);
+  let peak = closes[0];
+  let maxDrawdownPct = 0;
+  for (const price of closes) {
+    peak = Math.max(peak, price);
+    if (peak > 0) maxDrawdownPct = Math.max(maxDrawdownPct, ((peak - price) / peak) * 100);
+  }
+
+  // A simple, explainable heuristic score from the selected window's return volatility
+  // and maximum peak-to-trough drawdown. It is not a probability or forecast.
+  const riskScore = Math.round(Math.min(100, volatilityPct * 5 + maxDrawdownPct * 0.8));
+  const riskLabel = riskScore < 30 ? 'LOW' : riskScore < 60 ? 'MODERATE' : 'HIGH';
+  const riskColor = riskScore < 30 ? '#4edea3' : riskScore < 60 ? '#f9c74f' : '#ffb3ad';
+  const needleAngle = -90 + (riskScore / 100) * 180;
   const rad = (needleAngle * Math.PI) / 180;
-  const centerX = 50;
-  const centerY = 58;
-  const needleLength = 38;
-  const nx = centerX + needleLength * Math.cos(rad);
-  const ny = centerY + needleLength * Math.sin(rad);
+  const nx = 50 + 38 * Math.cos(rad);
+  const ny = 58 + 38 * Math.sin(rad);
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <svg viewBox="0 0 100 70" className="w-full max-w-[220px]" style={{ transform: 'scaleX(1)' }}>
-        {/* Gauge arc background (gray) */}
-        <path
-          d="M 12,58 A 38,38 0 0,1 88,58"
-          fill="none"
-          stroke="#2a2a2c"
-          strokeWidth="8"
-          strokeLinecap="round"
-        />
-        
-        {/* Colored arc (0-100) */}
-        <path
-          d={`M 12,58 A 38,38 0 0,1 ${12 + (riskPercent / 100) * 76},${58 - (riskPercent / 100) * 38 * Math.sin(Math.PI / 2) * 2}`}
-          fill="none"
-          stroke={riskColor}
-          strokeWidth="8"
-          strokeLinecap="round"
-          opacity="0.8"
-        />
-        
-        {/* Needle (pivot point + line + circle) */}
-        <line
-          x1={centerX}
-          y1={centerY}
-          x2={nx}
-          y2={ny}
-          stroke={riskColor}
-          strokeWidth="3"
-          strokeLinecap="round"
-          opacity="0.9"
-        />
-        <circle cx={centerX} cy={centerY} r="4" fill={riskColor} opacity="0.95" />
-        
-        {/* Labels */}
-        <text x="15" y="72" fontSize="9" fill="rgba(255,255,255,0.3)" fontFamily="monospace">LOW</text>
-        <text x="46" y="72" fontSize="9" fill="rgba(255,255,255,0.3)" fontFamily="monospace" textAnchor="middle">MID</text>
-        <text x="80" y="72" fontSize="9" fill="rgba(255,255,255,0.3)" fontFamily="monospace" textAnchor="end">HIGH</text>
+      <svg viewBox="0 0 100 70" className="w-full max-w-[220px]" role="img" aria-label={`Historical risk score ${riskScore} out of 100`}>
+        <path d="M 12,58 A 38,38 0 0,1 88,58" fill="none" stroke="#2a2a2c" strokeWidth="8" strokeLinecap="round" />
+        <path d={`M 12,58 A 38,38 0 0,1 ${50 + 38 * Math.cos(Math.PI - (riskScore / 100) * Math.PI)},${58 - 38 * Math.sin((riskScore / 100) * Math.PI)}`} fill="none" stroke={riskColor} strokeWidth="8" strokeLinecap="round" opacity="0.85" />
+        <line x1="50" y1="58" x2={nx} y2={ny} stroke={riskColor} strokeWidth="3" strokeLinecap="round" />
+        <circle cx="50" cy="58" r="4" fill={riskColor} />
+        <text x="15" y="69" fontSize="8" fill="rgba(255,255,255,0.45)">LOW</text>
+        <text x="50" y="69" fontSize="8" textAnchor="middle" fill="rgba(255,255,255,0.45)">MID</text>
+        <text x="85" y="69" fontSize="8" textAnchor="end" fill="rgba(255,255,255,0.45)">HIGH</text>
       </svg>
-      
       <div className="text-center">
-        <p className="text-2xl font-black" style={{ color: riskColor }}>{riskLabel}</p>
-        <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--on-surface-variant)]">Risk Level (RSI: {rsiValue.toFixed(0)})</p>
+        <p className="text-2xl font-black" style={{ color: riskColor }}>{riskLabel} · {riskScore}/100</p>
+        <p className="text-[10px] uppercase tracking-[0.15em] text-[var(--on-surface-variant)]">Historical risk heuristic</p>
       </div>
+      <div className="grid w-full grid-cols-2 gap-3 text-left">
+        <div className="rounded-xl bg-[var(--surface-lowest)] p-3">
+          <p className="text-[10px] uppercase tracking-wide text-[var(--on-surface-variant)]">Return volatility</p>
+          <p className="mt-1 font-mono text-white">{volatilityPct.toFixed(2)}%</p>
+        </div>
+        <div className="rounded-xl bg-[var(--surface-lowest)] p-3">
+          <p className="text-[10px] uppercase tracking-wide text-[var(--on-surface-variant)]">Max drawdown</p>
+          <p className="mt-1 font-mono text-white">-{maxDrawdownPct.toFixed(2)}%</p>
+        </div>
+      </div>
+      <p className="text-xs leading-5 text-[var(--on-surface-variant)]">
+        Based on price changes in the selected chart window. This is a transparent heuristic, not an ML model, loss probability, or investment recommendation.
+      </p>
     </div>
   );
 }
@@ -567,10 +547,10 @@ export default function StockDetailPage() {
 
             {/* ── RIGHT: Sidebar ── */}
             <aside className="col-span-12 space-y-6 lg:col-span-4">
-              {/* Risk Gauge (RSI-based) */}
+              {/* Historical risk snapshot: volatility + drawdown, not RSI overbought/oversold. */}
               <SurfaceCard className="p-6 text-center">
                 <p className="mb-4 text-xs font-black uppercase tracking-[0.22em] text-[var(--on-surface-variant)]">Market Risk Analysis</p>
-                <RiskGauge rsiValue={combined?.rsi?.rsi ?? 50} />
+                <RiskGauge data={details?.historical_data ?? []} />
                 {sentiment?.sentiment_analysis?.recommendation && (
                   <p className="mt-4 text-sm leading-7 text-[var(--on-surface-variant)]">
                     {sentiment.sentiment_analysis.recommendation}
