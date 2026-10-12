@@ -6,12 +6,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard, Skeleton, Icon } from '@/components/sentinel/primitives';
 import { useGlobalNewsQuery } from '@/hooks/queries/use-news';
 import type { NewsArticle } from '@/lib/types';
 import { formatRelativeTime } from '@/lib/sentinel-utils';
+import { newsService } from '@/lib/api-service';
+import { queryKeys } from '@/lib/query-keys';
 
 function sentimentBadge(sentiment?: string | null) {
   if (!sentiment) return null;
@@ -34,6 +37,21 @@ const NO_ARTICLES: NewsArticle[] = [];
 
 export default function NewsPage() {
   const newsQuery = useGlobalNewsQuery();
+  const queryClient = useQueryClient();
+  const [manualRefresh, setManualRefresh] = useState(false);
+
+  async function refreshNews() {
+    if (manualRefresh) return;
+    setManualRefresh(true);
+    try {
+      const fresh = await newsService.global(50, true);
+      queryClient.setQueryData(queryKeys.news.global(), fresh);
+    } catch {
+      await newsQuery.refetch();
+    } finally {
+      setManualRefresh(false);
+    }
+  }
   // Stable reference while there is no data, so the effects below don't loop.
   const cachedNews = newsQuery.data ?? NO_ARTICLES;
   const isRefetching = newsQuery.isFetching && !newsQuery.isPending;
@@ -108,12 +126,12 @@ export default function NewsPage() {
             />
           </div>
           <button
-            onClick={() => newsQuery.refetch()}
-            disabled={newsQuery.isFetching}
+            onClick={refreshNews}
+            disabled={newsQuery.isFetching || manualRefresh}
             className="flex items-center gap-2 rounded-xl bg-[var(--surface-high)] px-4 py-2.5 text-sm font-medium text-white transition-all disabled:opacity-50"
           >
             <Icon name={isRefetching ? 'progress_activity' : 'refresh'} className={isRefetching ? 'animate-spin' : ''} />
-            {isRefetching ? 'Refreshing...' : 'Refresh'}
+            {isRefetching || manualRefresh ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
 

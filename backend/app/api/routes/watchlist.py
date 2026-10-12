@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db_session
 from app.models.user import User
 from app.models.watchlist import Watchlist
+from app.api.routes.search import _finnhub_symbol_search
 
 router = APIRouter(prefix="/watchlist", tags=["watchlist"])
 
@@ -37,6 +38,19 @@ def add_to_watchlist(
     ticker_upper = body.ticker.strip().upper()
     if not ticker_upper:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ticker cannot be empty")
+
+    # Do not persist arbitrary strings as watchlist symbols. Require an exact
+    # symbol match from the market symbol provider before adding it.
+    matches = _finnhub_symbol_search(ticker_upper)
+    valid_symbols = {
+        str(item.get("symbol") or item.get("displaySymbol") or "").strip().upper()
+        for item in matches
+    }
+    if ticker_upper not in valid_symbols:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{ticker_upper} is not a recognized ticker. Search and choose a valid symbol.",
+        )
 
     existing = db.query(Watchlist).filter(Watchlist.user_id == current_user.id, Watchlist.ticker == ticker_upper).first()
     if existing:

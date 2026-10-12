@@ -27,6 +27,17 @@ export function useAddToWatchlistMutation() {
   });
 }
 
+/** Removes a ticker and immediately updates the cached list. */
+export function useRemoveFromWatchlistMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ticker: string) => watchlistService.remove(ticker),
+    onSuccess: (watchlist) => {
+      queryClient.setQueryData(queryKeys.watchlist.list(), watchlist);
+    },
+  });
+}
+
 /**
  * Latest quote per symbol, refreshed every 10 s. There is no batch quote
  * endpoint, so this is one request per symbol; each is cached under

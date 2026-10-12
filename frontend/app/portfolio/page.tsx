@@ -13,7 +13,7 @@ import {
   usePortfolioSummaryQuery,
 } from '@/hooks/queries/use-portfolio';
 import { useSymbolSearchQuery } from '@/hooks/queries/use-symbol-search';
-import { useBuyMutation } from '@/hooks/queries/use-trades';
+import { useBuyMutation, useSellMutation } from '@/hooks/queries/use-trades';
 import { getErrorMessage } from '@/lib/api-service';
 import type { SymbolSearchItem } from '@/lib/types';
 import { formatCurrency, formatPercent, exportToCSV } from '@/lib/sentinel-utils';
@@ -38,6 +38,7 @@ export default function PortfolioPage() {
   const loadingGrowth = growthQuery.isPending || growthQuery.isPlaceholderData;
 
   const buyMutation = useBuyMutation();
+  const sellMutation = useSellMutation();
 
   // Add Holding form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -292,6 +293,9 @@ export default function PortfolioPage() {
                 </span>
               </div>
             </div>
+            {sellMutation.isError ? (
+              <p className="px-6 pb-3 text-xs text-tertiary">{getErrorMessage(sellMutation.error, 'Unable to sell holding.')}</p>
+            ) : null}
             {holdingsQuery.isError ? (
               <div className="flex items-center justify-between px-6 py-6">
                 <p className="text-sm text-tertiary">Failed to load holdings.</p>
@@ -325,6 +329,7 @@ export default function PortfolioPage() {
                       <th className="px-5 py-3">Current</th>
                       <th className="px-5 py-3">Day %</th>
                       <th className="px-5 py-3 text-right">P&L</th>
+                      <th className="px-5 py-3 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -349,6 +354,21 @@ export default function PortfolioPage() {
                           <p className={`font-mono text-[10px] transition-colors duration-300 ${(holding.pl_percent ?? 0) >= 0 ? 'text-secondary/80' : 'text-tertiary/80'}`}>
                             {formatPercent(holding.pl_percent)}
                           </p>
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <button
+                            type="button"
+                            disabled={sellMutation.isPending}
+                            onClick={() => {
+                              if (window.confirm('Sell all ' + holding.quantity + ' shares of ' + holding.ticker + '?')) {
+                                sellMutation.mutate({ symbol: holding.ticker, quantity: holding.quantity });
+                              }
+                            }}
+                            className="rounded-lg border border-tertiary/30 px-3 py-2 text-xs font-semibold text-tertiary hover:bg-tertiary/10 disabled:opacity-50"
+                            aria-label={'Sell all shares of ' + holding.ticker}
+                          >
+                            Sell all
+                          </button>
                         </td>
                       </tr>
                     ))}
