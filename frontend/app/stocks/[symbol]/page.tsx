@@ -7,19 +7,17 @@ import { ProtectedScreen } from '@/components/sentinel/protected-screen';
 import { SentinelShell } from '@/components/sentinel/shell';
 import { SurfaceCard, Skeleton } from '@/components/sentinel/primitives';
 import { useStockDetailsQuery, useStockIndicatorsQuery, useStockSentimentQuery, useStockMLVolatilityQuery } from '@/hooks/queries/use-stock';
-import type { CombinedIndicators, HistoricalPoint } from '@/lib/types';
+import type { HistoricalPoint } from '@/lib/types';
 import { formatCompactNumber, formatCurrency, formatPercent } from '@/lib/sentinel-utils';
 
 /* ─── Chart with optional indicator lines (No Flicker) ─── */
 function StockChart({
   data,
-  indicators,
   activeIndicators,
   chartType = 'line',
   onChartTypeChange,
 }: {
   data: HistoricalPoint[];
-  indicators: CombinedIndicators | null;
   activeIndicators: Set<string>;
   chartType?: 'line' | 'candlestick';
   onChartTypeChange?: (type: 'line' | 'candlestick') => void;
@@ -58,11 +56,46 @@ function StockChart({
   const path = closes.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i)},${toY(v)}`).join(' ');
   const area = `${path} L${toX(data.length - 1)},${Y_MARGIN + CHART_HEIGHT} L${X_MARGIN},${Y_MARGIN + CHART_HEIGHT} Z`;
 
-  // Indicator values
-  const smaY = indicators?.sma?.sma != null ? toY(indicators.sma.sma) : null;
-  const emaY = indicators?.ema?.ema != null ? toY(indicators.ema.ema) : null;
-  const rsiY = indicators?.rsi?.rsi != null ? Y_MARGIN + ((100 - indicators.rsi.rsi) / 100) * CHART_HEIGHT : null;
-
+  // Calculate indicator series from the same historical closes shown in this chart.
+  // This avoids plotting a single latest indicator value as if it applied to every date.
+  const smaSeries = closes.map((_, index) => {
+    if (index < 19) return null;
+    const window = closes.slice(index - 19, index + 1);
+    return window.reduce((sum, value) => sum + value, 0) / window.length;
+  });
+  const emaSeries: number[] = [];
+  const emaMultiplier = 2 / 13;
+  closes.forEach((close, index) => {
+    if (index === 0) emaSeries.push(close);
+    else {
+      const previous = emaSeries[index - 1] ?? close;
+      emaSeries.push(close * emaMultiplier + previous * (1 - emaMultiplier));
+    }
+  });
+  const rsiSeries: Array<number | null> = closes.map(() => null);
+  if (closes.length > 14) {
+    let averageGain = 0;
+    let averageLoss = 0;
+    for (let i = 1; i <= 14; i += 1) {
+      const change = closes[i] - closes[i - 1];
+      averageGain += Math.max(change, 0);
+      averageLoss += Math.max(-change, 0);
+    }
+    averageGain /= 14;
+    averageLoss /= 14;
+    const calculateRsi = (gain: number, loss: number) =>
+      loss === 0 ? (gain === 0 ? 50 : 100) : 100 - 100 / (1 + gain / loss);
+    rsiSeries[14] = calculateRsi(averageGain, averageLoss);
+    for (let i = 15; i < closes.length; i += 1) {
+      const change = closes[i] - closes[i - 1];
+      averageGain = (averageGain * 13 + Math.max(change, 0)) / 14;
+      averageLoss = (averageLoss * 13 + Math.max(-change, 0)) / 14;
+      rsiSeries[i] = calculateRsi(averageGain, averageLoss);
+    }
+  }
+  const smaPath = smaSeries.map((value, index) => value == null ? '' : `${index === 0 || smaSeries[index - 1] == null ? 'M' : 'L'}${toX(index)},${toY(value)}`).filter(Boolean).join(' ');
+  const emaPath = emaSeries.map((value, index) => `${index === 0 ? 'M' : 'L'}${toX(index)},${toY(value)}`).join(' ');
+  const rsiPath = rsiSeries.map((value, index) => value == null ? '' : `${index === 14 || rsiSeries[index - 1] == null ? 'M' : 'L'}${toX(index)},${8 + ((100 - value) / 100) * 44}`).filter(Boolean).join(' ');
   // Get hovered candle data
   const hoveredIndex = hoveredIndexRef.current;
   const hoveredData = hoveredIndex != null && data[hoveredIndex] ? data[hoveredIndex] : null;
@@ -267,21 +300,30 @@ function StockChart({
           </>
         )}
 
-        {/* SMA – Blue line */}
-        {activeIndicators.has('SMA') && smaY !== null && (
-          <line x1={X_MARGIN} y1={smaY} x2={SVG_WIDTH - 20} y2={smaY} stroke="#adc6ff" strokeWidth="2" strokeDasharray="8 6" opacity="0.8" />
+        {/* SMA 20 and EMA 12 are time-series overlays, not horizontal latest-value lines. */}
+        {activeIndicators.has('SMA') && smaSeries.some((value) => value !== null) && (
+          <path d={smaPath} fill="none" stroke="#adc6ff" strokeWidth="2" opacity="0.9" />
         )}
-        
-        {/* EMA – Orange line */}
-        {activeIndicators.has('EMA') && emaY !== null && (
-          <line x1={X_MARGIN} y1={emaY} x2={SVG_WIDTH - 20} y2={emaY} stroke="#ffb3ad" strokeWidth="2" strokeDasharray="8 6" opacity="0.8" />
-        )}
-        
-        {/* RSI – Purple line (inverted: 0 at bottom, 100 at top) */}
-        {activeIndicators.has('RSI') && rsiY !== null && (
-          <line x1={X_MARGIN} y1={rsiY} x2={SVG_WIDTH - 20} y2={rsiY} stroke="#f9c74f" strokeWidth="2" strokeDasharray="4 8" opacity="0.8" />
+        {activeIndicators.has('EMA') && emaPath && (
+          <path d={emaPath} fill="none" stroke="#ffb3ad" strokeWidth="2" opacity="0.9" />
         )}
       </svg>
+      {activeIndicators.has('RSI') && (
+        <div className="rounded-xl border border-white/5 bg-[rgba(12,22,28,0.65)] px-3 py-2">
+          <div className="mb-1 flex items-center justify-between text-xs text-[var(--on-surface-variant)]">
+            <span>RSI (14) · separate 0–100 scale</span>
+            <span>{rsiSeries.at(-1) == null ? 'Not enough history' : `Latest ${(rsiSeries.at(-1) as number).toFixed(1)}`}</span>
+          </div>
+          <svg viewBox={`0 0 ${SVG_WIDTH} 60`} className="h-[76px] w-full" preserveAspectRatio="none" role="img" aria-label="Relative Strength Index over time, from 0 to 100">
+            {[30, 50, 70].map((level) => {
+              const y = 8 + ((100 - level) / 100) * 44;
+              return <g key={level}><line x1={X_MARGIN} y1={y} x2={SVG_WIDTH - 20} y2={y} stroke="rgba(255,255,255,0.12)" strokeDasharray="4 5" /><text x={X_MARGIN - 10} y={y + 3} textAnchor="end" fontSize="10" fill="rgba(255,255,255,0.45)">{level}</text></g>;
+            })}
+            <path d={rsiPath} fill="none" stroke="#c4a7ff" strokeWidth="2.5" strokeLinejoin="round" />
+          </svg>
+          <p className="mt-1 text-[10px] text-[var(--on-surface-variant)]">Below 30 is commonly considered oversold; above 70 overbought. RSI is a momentum indicator, not a guarantee of reversals.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -482,7 +524,6 @@ export default function StockDetailPage() {
                 ) : (
                   <StockChart
                     data={details?.historical_data ?? []}
-                    indicators={combined}
                     activeIndicators={activeIndicators}
                     chartType={chartType}
                     onChartTypeChange={setChartType}
@@ -494,7 +535,7 @@ export default function StockDetailPage() {
                   <div className="mt-3 flex gap-4 text-[10px] font-black uppercase tracking-[0.15em] animate-fadeIn transition-all duration-300">
                     {activeIndicators.has('SMA') && <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-5 bg-[#adc6ff]" />SMA {combined?.sma?.sma?.toFixed(2)}</span>}
                     {activeIndicators.has('EMA') && <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-5 bg-[#ffb3ad]" />EMA {combined?.ema?.ema?.toFixed(2)}</span>}
-                    {activeIndicators.has('RSI') && <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-5 bg-[#f9c74f]" />RSI {combined?.rsi?.rsi?.toFixed(1)}</span>}
+                    {activeIndicators.has('RSI') && <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-5 bg-[#c4a7ff]" />RSI {combined?.rsi?.rsi?.toFixed(1)}</span>}
                   </div>
                 )}
               </SurfaceCard>
