@@ -44,5 +44,6 @@ export const queryKeys = {
     /** Quote, day stats and chart history for one range (GET /stocks/{symbol}?range=). */
     details: (symbol: string, range: string) => ['stocks', symbol, 'details', range] as const,
     indicators: (symbol: string) => ['stocks', symbol, 'indicators'] as const,
+    mlRisk: (symbol: string) => ['stocks', symbol, 'ml-risk'] as const,
   },
 };
