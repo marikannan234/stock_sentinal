@@ -8,7 +8,7 @@ import {
   ArrowRight,
   BellRing,
   CheckCircle2,
-  ChartNoAxesCombined,
+  LineChart,
   ShieldCheck,
   Sparkles,
   Target,
@@ -18,7 +18,7 @@ import { useAuthStore } from '@/lib/auth';
 
 const features = [
   {
-    icon: ChartNoAxesCombined,
+    icon: LineChart,
     title: 'A portfolio with context',
     description: 'See invested capital, priced market value, returns, allocation, and when a quote is missing—without pretending incomplete data is complete.',
     number: '01',
