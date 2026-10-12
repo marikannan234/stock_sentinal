@@ -81,6 +81,22 @@ export default function DashboardPage() {
               </div>
             </SurfaceCard>
 
+            {portfolio && (portfolio.valuation_coverage_percent ?? 100) < 100 ? (
+              <div className="flex items-start gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-4">
+                <Icon name="error_outline" className="mt-0.5 shrink-0 text-[16px] text-amber-300" />
+                <div>
+                  <p className="text-sm font-bold text-amber-200">Portfolio valuation is partial</p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--on-surface-variant)]">
+                    Prices available for {portfolio.priced_holdings ?? 0} of {portfolio.total_holdings ?? 0} holdings.
+                    Portfolio P&amp;L excludes positions without a valid quote.
+                  </p>
+                  <Link href="/portfolio" className="mt-2 inline-block text-xs font-bold text-[var(--primary)] hover:underline">
+                    Review holdings
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+
             <SurfaceCard className="p-6">
               <div className="mb-6 flex items-center justify-between">
                 <div>
