@@ -74,7 +74,7 @@ def build_training_frame(history: pd.DataFrame) -> pd.DataFrame:
         [returns.shift(-offset) for offset in range(1, HORIZON_DAYS + 1)],
         axis=1,
     )
-    frame["target_volatility"] = future_returns.std(axis=1, ddof=1) * np.sqrt(252)
+    frame["target_volatility"] = future_returns.std(axis=1, ddof=1).where(future_returns.notna().all(axis=1)) * np.sqrt(252)
     frame = frame.replace([np.inf, -np.inf], np.nan)
     return frame.dropna(subset=[*FEATURE_COLUMNS, "target_volatility"])
 
