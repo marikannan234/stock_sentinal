@@ -2,6 +2,8 @@ name: Production API Endpoint Audit
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
