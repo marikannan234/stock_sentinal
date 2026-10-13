@@ -17,6 +17,10 @@ export default function SettingsPage() {
   const [nameLoading, setNameLoading] = useState(false);
   const [nameError, setNameError] = useState('');
   const [nameSaved, setNameSaved] = useState(false);
+  const [telegramChatId, setTelegramChatId] = useState("");
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramError, setTelegramError] = useState("");
+  const [telegramSaved, setTelegramSaved] = useState(false);
 
   useEffect(() => {
     Promise.allSettled([profileService.getProfile(), profileService.getSettings()]).then(
@@ -24,11 +28,30 @@ export default function SettingsPage() {
         if (profileResult.status === 'fulfilled') {
           setProfile(profileResult.value);
           setNameValue(profileResult.value.full_name ?? '');
+          setTelegramChatId(profileResult.value.telegram_chat_id ?? '');
         }
         if (settingsResult.status === 'fulfilled') setSettings(settingsResult.value);
       },
     );
   }, []);
+
+  async function saveTelegramChatId(e: FormEvent) {
+    e.preventDefault();
+    setTelegramLoading(true);
+    setTelegramError("");
+    setTelegramSaved(false);
+    try {
+      const updated = await profileService.updateProfile(profile?.full_name ?? "", telegramChatId);
+      setProfile(updated);
+      setTelegramChatId(updated.telegram_chat_id ?? "");
+      setTelegramSaved(true);
+      setTimeout(() => setTelegramSaved(false), 2500);
+    } catch (err) {
+      setTelegramError(getErrorMessage(err));
+    } finally {
+      setTelegramLoading(false);
+    }
+  }
 
   async function saveSettings(nextSettings: Partial<UserSettings>) {
     try {
@@ -118,6 +141,30 @@ export default function SettingsPage() {
                   )}
                 </div>
               </div>
+            </SurfaceCard>
+
+            <SurfaceCard className="p-8">
+              <h2 className="mb-2 text-xl font-bold text-white">Telegram Alerts</h2>
+              <p className="mb-5 text-sm text-[var(--on-surface-variant)]">
+                Add your Telegram chat ID to receive triggered stock alerts. Telegram delivery also requires the bot to be configured by the server operator.
+              </p>
+              <form onSubmit={saveTelegramChatId} className="space-y-3">
+                <label htmlFor="telegram-chat-id" className="block text-sm font-semibold text-white">Telegram Chat ID</label>
+                <input
+                  id="telegram-chat-id"
+                  value={telegramChatId}
+                  onChange={(e) => setTelegramChatId(e.target.value)}
+                  maxLength={64}
+                  className="w-full max-w-md rounded-xl bg-[var(--surface-lowest)] px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-[var(--primary)]/40"
+                  placeholder="e.g. 123456789"
+                />
+                <p className="text-xs text-[var(--on-surface-variant)]">Leave blank to stop Telegram notifications for this account.</p>
+                <button type="submit" disabled={telegramLoading} className="rounded-xl bg-[var(--primary)] px-4 py-2.5 text-xs font-bold text-[var(--on-primary)] disabled:opacity-60">
+                  {telegramLoading ? "Saving…" : "Save Telegram ID"}
+                </button>
+                {telegramError && <p className="text-xs text-tertiary">{telegramError}</p>}
+                {telegramSaved && <p className="text-xs text-secondary">Telegram ID saved.</p>}
+              </form>
             </SurfaceCard>
 
             {/* General Preferences */}
