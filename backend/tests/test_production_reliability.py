@@ -46,3 +46,28 @@ def test_portfolio_buy_can_use_market_quote_when_symbol_search_is_unavailable(
 
     assert response.status_code == 201, response.text
     assert response.json()[0]["ticker"] == "AAPL"
+
+
+def test_empty_snapshot_failure_refreshes_negative_cache_timestamp(monkeypatch):
+    import time
+
+    with stocks_extended._top_movers_cache_lock:
+        stocks_extended.top_movers_cache.update(
+            data=[],
+            timestamp=time.time() - stocks_extended.MARKET_FAILURE_CACHE_TTL_SECONDS - 1,
+        )
+
+    calls = []
+
+    def unavailable(symbols):
+        calls.append(list(symbols))
+        return []
+
+    monkeypatch.setattr(stocks_extended, "_fetch_market_quotes_batch", unavailable)
+
+    assert stocks_extended._get_market_snapshot_quotes() == []
+    assert stocks_extended._get_market_snapshot_quotes() == []
+    assert len(calls) == 1
+
+    with stocks_extended._top_movers_cache_lock:
+        stocks_extended.top_movers_cache.update(data=None, timestamp=0.0)
