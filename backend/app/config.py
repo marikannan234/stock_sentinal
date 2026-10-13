@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str | None = None
     TWILIO_WHATSAPP_NUMBER: str | None = None  # e.g., "+14155238886"
 
+    # Telegram Bot API notifications. Disabled until configured by the operator.
+    ENABLE_TELEGRAM_NOTIFICATIONS: bool = False
+    TELEGRAM_BOT_TOKEN: str | None = None
+
     # Deprecated, no effect: alerts are one-shot (they deactivate when they
     # fire and are re-armed by re-enabling them), so there is no cooldown.
     # Kept so existing .env files that still set these keep loading.
