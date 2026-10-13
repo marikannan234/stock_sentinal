@@ -61,7 +61,7 @@ jobs:
       MAIL_USERNAME: ci@example.com
       MAIL_PASSWORD: ci-only-password
       MAIL_FROM: ci@example.com
-      BACKEND_CORS_ORIGINS: http://localhost:3000
+      BACKEND_CORS_ORIGINS: '["http://localhost:3000"]'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
