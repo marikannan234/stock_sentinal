@@ -167,10 +167,12 @@ class TradeHistory(Base):
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
     entry_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
-    exit_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    exit_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     trade_type: Mapped[TradeType] = mapped_column(_varchar_enum(TradeType), nullable=False)
-    profit_loss: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    profit_loss: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     profit_loss_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Legacy duration column retained in the database for backwards compatibility.
+    duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -179,7 +181,7 @@ class TradeHistory(Base):
         nullable=False,
         index=True,
     )
-    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    closed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     user: Mapped["User"] = relationship("User", back_populates="trade_history")
     trade: Mapped["Trade | None"] = relationship("Trade", back_populates="history_entries")
