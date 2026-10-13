@@ -16,6 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Migration 0003 introduced this column without the index declared by the model.
+    op.create_index("ix_trade_history_created_at", "trade_history", ["created_at"], unique=False)
     # Preserve existing stock records while bringing the catalog names/fields
     # into line with the runtime model.
     op.alter_column("stocks", "symbol", new_column_name="ticker", existing_type=sa.String(length=10))
@@ -55,6 +57,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index("ix_trade_history_created_at", table_name="trade_history")
     op.alter_column("stock_predictions", "confidence", existing_type=sa.Float(), nullable=False)
     op.drop_column("stock_predictions", "actual_return")
     op.drop_column("stock_predictions", "actual_price")
