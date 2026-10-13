@@ -72,17 +72,24 @@ def _finnhub_symbol_search(query: str) -> List[Dict[str, Any]]:
   params = {"q": q, "token": api_key}
 
   try:
-    # Use ThreadPoolExecutor to enforce hard 2-second timeout
+    # Avoid executor context-manager shutdown: it waits for timed-out work.
     def _fetch():
       return requests.get(url, params=params, timeout=2)
-    
-    with ThreadPoolExecutor(max_workers=1) as executor:
-      future = executor.submit(_fetch)
-      try:
-        resp = future.result(timeout=2)  # Hard timeout
-      except FutureTimeoutError:
-        logger.warning(f"⚠️ Finnhub search TIMEOUT for '{q}' (>2s)")
-        return []
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_fetch)
+    try:
+      resp = future.result(timeout=2)
+    except FutureTimeoutError:
+      future.cancel()
+      executor.shutdown(wait=False, cancel_futures=True)
+      logger.warning(f"Finnhub search TIMEOUT for '{q}' (>2s)")
+      return []
+    except Exception:
+      executor.shutdown(wait=False, cancel_futures=True)
+      raise
+    else:
+      executor.shutdown(wait=True)
   except requests.ConnectionError as e:
     logger.warning(f"Finnhub search connection error: {str(e)[:100]}")
     return []
