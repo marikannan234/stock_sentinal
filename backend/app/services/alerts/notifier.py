@@ -17,6 +17,7 @@ from app.config import settings
 from app.core.event_loop import run_coroutine_from_thread
 from app.models.alert import Alert
 from app.services.alerts.base import CheckResult
+from app.services.telegram_service import send_telegram_notification
 from app.services.email_smtp import send_alert_notification
 from app.services.whatsapp_service import send_whatsapp_notification
 
@@ -34,6 +35,7 @@ WEBSOCKET_TIMEOUT_SECONDS = 5.0
 class NotificationOutcome:
     email_sent: bool = False
     whatsapp_sent: bool = False
+    telegram_sent: bool = False
     websocket_sent: bool = False
 
 
@@ -73,6 +75,15 @@ class AlertNotifier:
             except Exception as exc:
                 logger.warning("Alert WhatsApp message failed", extra={**context, "error_type": type(exc).__name__})
 
+        if settings.ENABLE_TELEGRAM_NOTIFICATIONS and user is not None and getattr(user, "telegram_chat_id", None):
+            try:
+                outcome.telegram_sent = bool(send_telegram_notification(
+                    chat_id=user.telegram_chat_id,
+                    message=telegram_message(alert, result, price, triggered_at),
+                ))
+            except Exception as exc:
+                logger.warning("Alert Telegram message failed", extra={**context, "error_type": type(exc).__name__})
+
         if BROADCAST_ALERTS_OVER_WEBSOCKET:
             outcome.websocket_sent = self._broadcast(alert, result, price, triggered_at)
 
@@ -111,4 +122,16 @@ def whatsapp_message(alert: Alert, result: CheckResult, price: float, triggered_
         f"🕒 Time: {triggered_at.strftime('%d-%m-%Y %H:%M')} UTC\n\n"
         "This alert is now paused. Re-enable it in StockSentinel to keep watching.\n\n"
         "_- StockSentinel_"
+    )
+
+
+def telegram_message(alert: Alert, result: CheckResult, price: float, triggered_at: datetime) -> str:
+    rule = result.description or f"{alert.stock_symbol} {alert.alert_type.value} alert"
+    return (
+        "🚨 STOCKSENTINEL ALERT\n\n"
+        f"Symbol: {alert.stock_symbol}\n"
+        f"Rule: {rule}\n"
+        f"Current price: {price:.2f}\n"
+        f"Triggered at: {triggered_at.strftime('%d-%m-%Y %H:%M')} UTC\n\n"
+        "This one-shot alert is now paused. Re-enable it in StockSentinel to keep watching."
     )
