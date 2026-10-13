@@ -97,10 +97,8 @@ This module is the only code that changes trades, positions or cash.
 
 ## Known issues
 
-These are tracked for later work and are not solved yet:
-
-- `/ws/alerts` remains unauthenticated and must not be enabled until notifications are scoped to the authenticated user. The frontend no longer opens this connection; email and WhatsApp notifications remain available.
-- The scheduler and caches live in the process, so running more than one backend process duplicates alert checks.
-- The models and migrations differ outside the trading and alert tables; `alembic check` is not clean.
-- `/api/indicators` (the indicator endpoints, separate from alerts) still fetches only 1–3 months of history, so SMA-50 and longer fail there.
-- `POST /api/portfolio` checks the symbol with Finnhub search. Without `FINNHUB_API_KEY` that search returns nothing, so every buy through that endpoint is rejected.
+- `/ws/alerts` remains unauthenticated and must not be enabled until notifications are scoped to the authenticated user. The frontend does not open this connection.
+- The scheduler and caches are process-local. Running multiple backend instances can duplicate alert checks and create independent caches; use a distributed scheduler/cache before scaling horizontally.
+- Market-data requests still depend on external providers and can return unavailable/stale data during outages or rate limits. The API must never substitute fabricated prices for trading.
+- Telegram notifications are opt-in and remain disabled until the operator configures `TELEGRAM_BOT_TOKEN` and enables `ENABLE_TELEGRAM_NOTIFICATIONS`.
+- The schema-alignment migration must be applied during deployment. Production was last observed at Alembic revision `0007_alert_type_parameters`; do not assume later migrations are applied until the deployment completes.
