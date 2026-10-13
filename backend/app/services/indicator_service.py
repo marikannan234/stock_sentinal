@@ -14,6 +14,23 @@ import logging
 
 import yfinance as yf
 
+
+def _history_window(period: int) -> str:
+    """Choose enough daily history for the requested indicator period.
+
+    Three calendar months only contain about 60 trading sessions, so they are
+    insufficient for common long-period requests such as SMA-100 or EMA-200.
+    """
+    if period <= 20:
+        return "3mo"
+    if period <= 50:
+        return "6mo"
+    if period <= 100:
+        return "1y"
+    if period <= 250:
+        return "2y"
+    return "5y"
+
 from app.core.exceptions import ValidationError, StockNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -58,7 +75,7 @@ def calculate_sma(
             # No timeout on macOS/Linux - yfinance is simple and usually fast
             # On Windows, signal.alarm() is not supported anyway
             ticker = yf.Ticker(symbol)
-            history = ticker.history(period="1mo")
+            history = ticker.history(period=_history_window(period), timeout=5)
         except Exception as e:
             logger.warning(f"Error fetching SMA data for {symbol}: {e}")
             raise StockNotFoundError(symbol)
@@ -173,7 +190,7 @@ def calculate_rsi(
             # No timeout on macOS/Linux - yfinance is simple and usually fast
             # On Windows, signal.alarm() is not supported anyway
             ticker = yf.Ticker(symbol)
-            history = ticker.history(period="3mo")  # Fetch 3 months to ensure enough data
+            history = ticker.history(period=_history_window(period), timeout=5)
         except Exception as e:
             logger.warning(f"Error fetching RSI data for {symbol}: {e}")
             raise StockNotFoundError(symbol)
@@ -313,7 +330,7 @@ def calculate_ema(
         # Fetch 3 months of historical data for EMA calculation
         # Need period + some buffer for initial SMA calculation
         stock = yf.Ticker(symbol)
-        data = stock.history(period="3mo")
+        data = stock.history(period=_history_window(period), timeout=5)
         
         # Validate data availability
         if data.empty:
