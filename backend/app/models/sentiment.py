@@ -11,8 +11,8 @@ from app.db.session import Base
 class SentimentRecord(Base):
     __tablename__ = "sentiment_records"
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    stock_id: Mapped[int] = mapped_column(ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    stock_id: Mapped[int] = mapped_column(ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False, index=True)
     source: Mapped[str] = mapped_column(String(32), nullable=False)
     window_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     window_end: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -21,4 +21,4 @@ class SentimentRecord(Base):
     mentions_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     raw_sample_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
