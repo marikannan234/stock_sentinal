@@ -9,6 +9,7 @@ from typing import List, Optional
 class Settings(BaseSettings):
     # General
     APP_NAME: str = "StockSentinel API"
+    FRONTEND_URL: str | None = None  # Optional absolute frontend URL used in notification links
     ENVIRONMENT: str = "local"  # local | staging | production
     DEBUG: bool = True
 
