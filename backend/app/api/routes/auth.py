@@ -49,6 +49,7 @@ def register_user(
         full_name=user_in.full_name,
         password_hash=get_password_hash(user_in.password),
         whatsapp_phone=user_in.whatsapp_phone,
+        telegram_chat_id=user_in.telegram_chat_id,
     )
     db.add(user)
     try:
@@ -143,6 +144,10 @@ def update_me(
     """Update the current user's profile."""
     if user_in.full_name is not None:
         current_user.full_name = user_in.full_name.strip() if user_in.full_name else None
+    if "telegram_chat_id" in user_in.model_fields_set:
+        current_user.telegram_chat_id = (
+            user_in.telegram_chat_id.strip() if user_in.telegram_chat_id else None
+        )
     db.commit()
     db.refresh(current_user)
     return current_user
