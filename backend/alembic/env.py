@@ -26,12 +26,21 @@ config.set_main_option("sqlalchemy.url", database_url)
 target_metadata = Base.metadata
 
 
+def include_name(name, type_, parent_names):
+    # These pre-runtime singular tables were superseded by portfolios/watchlists.
+    # Keep their data untouched while excluding them from autogenerate diffs.
+    if type_ == "table" and name in {"portfolio", "watchlist"}:
+        return False
+    return True
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,
+        include_name=include_name,
     )
 
     with context.begin_transaction():
