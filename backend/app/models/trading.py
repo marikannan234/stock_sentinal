@@ -9,7 +9,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum as SQLEnum, Float, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, Enum as SQLEnum, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -22,11 +22,11 @@ class UserSettings(Base):
     """User preference settings."""
 
     __tablename__ = "user_settings"
+    __table_args__ = (UniqueConstraint("user_id", name="user_settings_user_id_key"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
-        unique=True,
         nullable=False,
         index=True,
     )
@@ -58,7 +58,7 @@ class SupportTicket(Base):
     )
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(50), default="open", nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="open", nullable=False, index=True)
     priority: Mapped[str] = mapped_column(String(50), default="medium", nullable=False)
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -126,6 +126,7 @@ class Trade(Base):
         _varchar_enum(TradeStatus),
         default=TradeStatus.OPEN,
         nullable=False,
+        index=True,
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -181,7 +182,7 @@ class TradeHistory(Base):
         nullable=False,
         index=True,
     )
-    closed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    closed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
     user: Mapped["User"] = relationship("User", back_populates="trade_history")
     trade: Mapped["Trade | None"] = relationship("Trade", back_populates="history_entries")
