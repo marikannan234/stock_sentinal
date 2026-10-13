@@ -725,3 +725,29 @@ def test_scheduler_survives_a_failing_run(monkeypatch):
         scheduler.stop_scheduler(wait=True)
 
     assert len(calls) >= 2
+
+
+def test_telegram_notification_is_sent_for_triggered_user_alert(
+    session_factory, db_session, owner, fake_market, monkeypatch
+):
+    sent = []
+    owner.telegram_chat_id = "123456"
+    db_session.commit()
+    monkeypatch.setattr(settings, "ENABLE_TELEGRAM_NOTIFICATIONS", True)
+    monkeypatch.setattr(
+        notifier,
+        "send_telegram_notification",
+        lambda **kwargs: sent.append(kwargs) or True,
+    )
+    alert = make_alert(
+        db_session, owner, condition=AlertCondition.GREATER_THAN, target_value=1
+    )
+    fake_market.set("AAPL", [100.0])
+
+    summary = run(session_factory, fake_market)
+
+    assert summary.triggered_ids == [alert.id]
+    assert len(sent) == 1
+    assert sent[0]["chat_id"] == "123456"
+    assert "STOCKSENTINEL ALERT" in sent[0]["message"]
+    assert "AAPL" in sent[0]["message"]
