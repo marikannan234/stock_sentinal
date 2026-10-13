@@ -69,15 +69,13 @@ def send_alert_email_smtp(
         msg.attach(MIMEText(html_body, "html"))
         
         # Send via SMTP
-        with smtplib.SMTP(settings.MAIL_SERVER, settings.MAIL_PORT, timeout=10) as server:
-            # Enable TLS if configured
-            if settings.MAIL_STARTTLS:
+        smtp_client = smtplib.SMTP_SSL if settings.MAIL_SSL_TLS else smtplib.SMTP
+        with smtp_client(settings.MAIL_SERVER, settings.MAIL_PORT, timeout=10) as server:
+            # STARTTLS and implicit SSL are mutually exclusive SMTP modes.
+            if settings.MAIL_STARTTLS and not settings.MAIL_SSL_TLS:
                 server.starttls()
-            
-            # Login
+
             server.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
-            
-            # Send message
             server.send_message(msg)
         
         logger.info(
