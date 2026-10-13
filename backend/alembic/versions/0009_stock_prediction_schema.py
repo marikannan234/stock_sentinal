@@ -53,12 +53,10 @@ def upgrade() -> None:
     )
     op.alter_column("stock_predictions", "generated_at", existing_type=sa.DateTime(), nullable=False)
     op.alter_column("stock_predictions", "horizon_days", existing_type=sa.Integer(), nullable=False)
-    op.alter_column("stock_predictions", "confidence", existing_type=sa.Float(), nullable=True)
 
 
 def downgrade() -> None:
     op.drop_index("ix_trade_history_created_at", table_name="trade_history")
-    op.alter_column("stock_predictions", "confidence", existing_type=sa.Float(), nullable=False)
     op.drop_column("stock_predictions", "actual_return")
     op.drop_column("stock_predictions", "actual_price")
     op.drop_column("stock_predictions", "feature_snapshot")
