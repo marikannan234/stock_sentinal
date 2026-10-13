@@ -355,7 +355,10 @@ def add_or_update_position(
     # Validate with Finnhub when it has results. Empty results can mean a missing
     # API key, rate limit, or provider outage. The trading engine below still
     # requires a real server-side market price before it writes any trade.
-    search_results = _finnhub_symbol_search(ticker_upper)
+    try:
+        search_results = _finnhub_symbol_search(ticker_upper)
+    except HTTPException:
+        search_results = []
     if search_results:
         matched = any(
             str(r.get("symbol", "") or r.get("displaySymbol", "")).upper() == ticker_upper
