@@ -71,3 +71,23 @@ def test_empty_snapshot_failure_refreshes_negative_cache_timestamp(monkeypatch):
 
     with stocks_extended._top_movers_cache_lock:
         stocks_extended.top_movers_cache.update(data=None, timestamp=0.0)
+
+
+def test_market_batch_timeout_does_not_enqueue_duplicate_provider_work(monkeypatch):
+    class PendingFuture:
+        def done(self):
+            return False
+
+    class UnexpectedExecutor:
+        def submit(self, request_fn):
+            raise AssertionError("must not enqueue another provider request")
+
+    monkeypatch.setattr(stocks_extended, "_BATCH_FETCH_FUTURE", PendingFuture())
+    monkeypatch.setattr(stocks_extended, "_BATCH_FETCH_EXECUTOR", UnexpectedExecutor())
+
+    try:
+        stocks_extended._run_batch_with_timeout(lambda: [], timeout_seconds=0.01)
+    except TimeoutError:
+        pass
+    else:
+        raise AssertionError("an in-flight provider request should be treated as timed out")
