@@ -310,14 +310,14 @@ def _refresh_market_snapshot() -> List[StockQuote]:
             logger.info(f"✓ Market data fetched and cached ({fetch_time:.0f}ms) - {len(quotes)} quotes")
             return quotes
 
-        if top_movers_cache["data"] is not None:
+        previous_snapshot = top_movers_cache["data"]
+        if previous_snapshot:
             age = current_time - top_movers_cache["timestamp"]
             logger.warning(f"⚠️ Live market data unavailable; returning last snapshot (age: {age:.1f}s)")
-            return top_movers_cache["data"]
+            return previous_snapshot
 
-    # Cache the empty result briefly so a failing/rate-limited provider is not
-    # called again by every dashboard poll. This is not a price fallback.
-    with _top_movers_cache_lock:
+        # Refresh the negative-cache timestamp after every failed fetch. Without
+        # this, requests storm the provider as soon as the first 5s TTL expires.
         top_movers_cache["data"] = []
         top_movers_cache["timestamp"] = time.time()
     logger.warning("Live market data unavailable; temporarily caching empty snapshot")
