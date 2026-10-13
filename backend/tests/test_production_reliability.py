@@ -28,3 +28,21 @@ def test_indicator_history_window_scales_with_requested_period():
     assert indicator_service._history_window(100) == "1y"
     assert indicator_service._history_window(200) == "2y"
     assert indicator_service._history_window(300) == "5y"
+
+
+def test_portfolio_buy_can_use_market_quote_when_symbol_search_is_unavailable(
+    client, auth_headers, market, monkeypatch
+):
+    from app.api.routes import portfolio
+
+    market.set("AAPL", "150.00")
+    monkeypatch.setattr(portfolio, "_finnhub_symbol_search", lambda symbol: [])
+
+    response = client.post(
+        "/api/portfolio",
+        headers=auth_headers,
+        json={"ticker": "AAPL", "quantity": 1},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()[0]["ticker"] == "AAPL"
