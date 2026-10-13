@@ -19,6 +19,7 @@ def upgrade() -> None:
     # Preserve existing stock records while bringing the catalog names/fields
     # into line with the runtime model.
     op.alter_column("stocks", "symbol", new_column_name="ticker", existing_type=sa.String(length=10))
+    op.alter_column("stocks", "ticker", existing_type=sa.String(length=10), type_=sa.String(length=16))
     op.drop_constraint("stocks_symbol_key", "stocks", type_="unique")
     op.drop_index("ix_stocks_symbol", table_name="stocks")
     op.alter_column("stocks", "sector", existing_type=sa.String(length=100), type_=sa.String(length=128))
@@ -74,6 +75,7 @@ def downgrade() -> None:
     op.drop_column("stocks", "currency")
     op.drop_column("stocks", "exchange")
     op.alter_column("stocks", "sector", existing_type=sa.String(length=128), type_=sa.String(length=100))
-    op.alter_column("stocks", "ticker", new_column_name="symbol", existing_type=sa.String(length=16))
+    op.alter_column("stocks", "ticker", existing_type=sa.String(length=16), type_=sa.String(length=10))
+    op.alter_column("stocks", "ticker", new_column_name="symbol", existing_type=sa.String(length=10))
     op.create_unique_constraint("stocks_symbol_key", "stocks", ["symbol"])
     op.create_index("ix_stocks_symbol", "stocks", ["symbol"], unique=False)
