@@ -161,6 +161,23 @@ def _run_with_timeout(request_fn, timeout_seconds: float):
 # DataFrame and never reads that shared state, so they need no lock.
 _YF_DOWNLOAD_LOCK = threading.Lock()
 
+# Keep only one market-snapshot provider request in flight. A Python thread
+# cannot be force-killed after a timeout; creating a fresh executor per request
+# can otherwise accumulate blocked workers during a provider outage.
+_BATCH_FETCH_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+_BATCH_FETCH_STATE_LOCK = threading.Lock()
+_BATCH_FETCH_FUTURE = None
+
+
+def _run_batch_with_timeout(request_fn, timeout_seconds: float):
+    global _BATCH_FETCH_FUTURE
+    with _BATCH_FETCH_STATE_LOCK:
+        if _BATCH_FETCH_FUTURE is not None and not _BATCH_FETCH_FUTURE.done():
+            raise FutureTimeoutError("previous market snapshot request is still running")
+        future = _BATCH_FETCH_EXECUTOR.submit(request_fn)
+        _BATCH_FETCH_FUTURE = future
+    return future.result(timeout=timeout_seconds)
+
 
 def _yf_download(**kwargs):
     with _YF_DOWNLOAD_LOCK:
@@ -190,7 +207,7 @@ def _fetch_market_quotes_batch(symbols: List[str]) -> List[StockQuote]:
             )
         
         try:
-            data = _run_with_timeout(_fetch, timeout_seconds=2)
+            data = _run_batch_with_timeout(_fetch, timeout_seconds=2)
         except FutureTimeoutError:
             logger.warning(f"⚠️ Batch fetch TIMEOUT for {len(symbols)} stocks (>2s) - no live snapshot")
             return []
