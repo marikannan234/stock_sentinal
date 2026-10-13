@@ -12,7 +12,7 @@ class StockPrediction(Base):
     __tablename__ = "stock_predictions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    stock_id: Mapped[int] = mapped_column(ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False, index=True)
+    stock_id: Mapped[int] = mapped_column(ForeignKey("stocks.id"), nullable=False, index=True)
     generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     horizon_days: Mapped[int] = mapped_column(Integer, nullable=False)
     target_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
