@@ -31,7 +31,7 @@ Optional:
 | `PAPER_TRADING_STARTING_CASH` | `100000.00`: the cash each new account starts with |
 | `MAIL_SERVER`, `MAIL_PORT`, `MAIL_STARTTLS` | `smtp.gmail.com`, `587`, `true` |
 | `ENABLE_EMAIL_NOTIFICATIONS` | `true` |
-| `ENABLE_WHATSAPP_NOTIFICATIONS` | `false`. If `true`, also set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_WHATSAPP_NUMBER`. |
+| `ENABLE_TELEGRAM_NOTIFICATIONS` | `false`. Set to `true` and configure `TELEGRAM_BOT_TOKEN` to enable Telegram alerts; users must save their Telegram Chat ID in Settings. |
 | `ALERT_COOLDOWN_MINUTES`, `ALERT_DEV_MODE`, `ALERT_LOG_COOLDOWN_CHECKS` | Deprecated; ignored. Alerts are one-shot, see [architecture](architecture.md#alerts-servicesalerts). |
 
 `BACKEND_CORS_ORIGINS` is parsed but not used yet. CORS origins are hardcoded in `app/main.py`; see [architecture](architecture.md#known-issues).
