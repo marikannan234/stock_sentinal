@@ -5,7 +5,7 @@ Next.js frontend (:3000) ──HTTP /api──▶ FastAPI backend (:8000) ──
             │                                   │
             └───────WebSocket /ws/alerts────────┤
                                                 ├──▶ Finnhub / yfinance (market data)
-                                                ├──▶ SMTP (alert emails), Twilio (WhatsApp)
+                                                ├──▶ SMTP (alert emails), Telegram Bot API
                                                 └──  APScheduler: alert checks every 30 s
 ```
 
@@ -16,7 +16,7 @@ Next.js frontend (:3000) ──HTTP /api──▶ FastAPI backend (:8000) ──
 | `main.py` | Creates the app. Registers middleware, exception handlers, CORS and routers, and starts and stops the scheduler through the lifespan handler. |
 | `config.py` | Settings from environment variables and `.env` (pydantic-settings) |
 | `api/routes/` | HTTP and WebSocket endpoints |
-| `services/` | Business logic: `trading_service` (paper trading), `alerts/` (alert evaluation), `alert_service` (alert CRUD) and `scheduler`, `email_smtp`, `whatsapp_service`, `indicator_service`, `news_service`, `sentiment_service` |
+| `services/` | Business logic: `trading_service` (paper trading), `alerts/` (alert evaluation), `alert_service` (alert CRUD) and `scheduler`, `email_smtp`, `telegram_service`, `indicator_service`, `news_service`, `sentiment_service` |
 | `models/` | SQLAlchemy models; the schema itself comes from Alembic (`backend/alembic/versions`) |
 | `schemas/` | Pydantic request and response models |
 | `ws/` | WebSocket connection manager and live price streamer |
@@ -28,7 +28,7 @@ All routers are mounted under `/api`, except WebSocket routes, which are under `
 
 | Prefix | What it does |
 |---|---|
-| `/api/auth` | Register, login (form or JSON; email or WhatsApp phone), `me`, change password. Password reset is disabled (returns 501). |
+| `/api/auth` | Register, login (form or JSON; email or legacy phone), `me`, change password. Password reset is disabled (returns 501). |
 | `/api/trade` | Paper trading: execute trades, close trades, trade history and stats |
 | `/api/portfolio` | Holdings, summary (including `buying_power` = cash), allocation, growth. `POST` buys and `DELETE` sells through the trading engine. |
 | `/api/alerts` | Alert CRUD |
@@ -77,7 +77,7 @@ This module is the only code that changes trades, positions or cash.
 - **Market data (`market_data.py`):** each symbol gets **one** yfinance daily-history request per run, however many alerts it has. The lookback is sized to the most demanding alert on that symbol: at least 21 bars, the SMA period + 1, and 3× the EMA or RSI period so they converge. For example, SMA-200 fetches about 300 calendar days. A missing, zero or NaN price skips that symbol for the run; no substitute price is ever used. If there isn't enough history for a period, the alert is skipped with a logged reason, never a signal.
 - **Checkers:** `price_checker`, `custom_checker`, `percentage_checker`, `crash_checker`, `volume_checker` and `indicator_checker` are pure functions of `(alert, snapshot)`. `indicators.py` holds the SMA, EMA and RSI math, with the same formulas as `indicator_service`.
 - **Lifecycle (one-shot):** when an alert fires it is deactivated (`is_active=false`, `is_triggered=true`), an `alert_history` row is written, and notifications are sent once. Re-enabling it (`PATCH /api/alerts/{id}` with `{"is_active": true}`) re-arms it and clears the recorded reference values. The trigger is claimed with a conditional UPDATE, so overlapping runs cannot fire it twice.
-- **Notifications (`notifier.py`):** email goes through `email_smtp`, and WhatsApp through Twilio if enabled and the user has a phone number. A failed notification is logged and never undoes the trigger or stops the run; `alert_history.email_sent` records whether the email was delivered. Logs mask email addresses and phone numbers. WebSocket push is implemented through `core/event_loop.py`, but it is switched **off** (`BROADCAST_ALERTS_OVER_WEBSOCKET`) until `/ws/alerts` is authenticated.
+- **Notifications (`notifier.py`):** email goes through `email_smtp`, and Telegram through `telegram_service` when enabled and the user has a Telegram Chat ID. A failed notification is logged and never undoes the trigger or stops the run; `alert_history.email_sent` records whether the email was delivered. Logs do not include recipient identifiers or credentials. WebSocket push is implemented through `core/event_loop.py`, but it is switched **off** (`BROADCAST_ALERTS_OVER_WEBSOCKET`) until `/ws/alerts` is authenticated.
 - **Error isolation:** each alert runs in its own transaction. An exception is logged with the alert ID, symbol, type and error category, and the run continues with the next alert. A failed symbol fetch skips only that symbol.
 
 ### Logging
