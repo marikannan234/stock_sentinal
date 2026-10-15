@@ -2,7 +2,7 @@
 
 Stock Sentinel is a stock-market dashboard with price alerts and paper trading.
 
-- **Backend:** FastAPI, SQLAlchemy 2, Alembic, PostgreSQL, APScheduler. Market data comes from Finnhub and yfinance, and alerts go out by email (SMTP) and optionally WhatsApp (Twilio).
+- **Backend:** FastAPI, SQLAlchemy 2, Alembic, PostgreSQL, APScheduler. Market data comes from Finnhub and yfinance, and alerts go out by email (SMTP) and optionally Telegram (Bot API).
 - **Frontend:** Next.js 15, React 18, Zustand, Axios, Tailwind CSS.
 
 ## Quick start (Docker)

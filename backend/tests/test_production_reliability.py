@@ -1,0 +1,93 @@
+from app.api.routes import stocks_extended
+from app.services import indicator_service
+
+
+def test_empty_market_snapshot_is_negative_cached(monkeypatch):
+    with stocks_extended._top_movers_cache_lock:
+        stocks_extended.top_movers_cache.update(data=None, timestamp=0.0)
+
+    calls = []
+
+    def unavailable(symbols):
+        calls.append(list(symbols))
+        return []
+
+    monkeypatch.setattr(stocks_extended, "_fetch_market_quotes_batch", unavailable)
+
+    assert stocks_extended._get_market_snapshot_quotes() == []
+    assert stocks_extended._get_market_snapshot_quotes() == []
+    assert len(calls) == 1
+
+    with stocks_extended._top_movers_cache_lock:
+        stocks_extended.top_movers_cache.update(data=None, timestamp=0.0)
+
+
+def test_indicator_history_window_scales_with_requested_period():
+    assert indicator_service._history_window(14) == "3mo"
+    assert indicator_service._history_window(50) == "6mo"
+    assert indicator_service._history_window(100) == "1y"
+    assert indicator_service._history_window(200) == "2y"
+    assert indicator_service._history_window(300) == "5y"
+
+
+def test_portfolio_buy_can_use_market_quote_when_symbol_search_is_unavailable(
+    client, auth_headers, market, monkeypatch
+):
+    from app.api.routes import portfolio
+
+    market.set("AAPL", "150.00")
+    monkeypatch.setattr(portfolio, "_finnhub_symbol_search", lambda symbol: [])
+
+    response = client.post(
+        "/api/portfolio",
+        headers=auth_headers,
+        json={"ticker": "AAPL", "quantity": 1},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()[0]["ticker"] == "AAPL"
+
+
+def test_empty_snapshot_failure_refreshes_negative_cache_timestamp(monkeypatch):
+    import time
+
+    with stocks_extended._top_movers_cache_lock:
+        stocks_extended.top_movers_cache.update(
+            data=[],
+            timestamp=time.time() - stocks_extended.MARKET_FAILURE_CACHE_TTL_SECONDS - 1,
+        )
+
+    calls = []
+
+    def unavailable(symbols):
+        calls.append(list(symbols))
+        return []
+
+    monkeypatch.setattr(stocks_extended, "_fetch_market_quotes_batch", unavailable)
+
+    assert stocks_extended._get_market_snapshot_quotes() == []
+    assert stocks_extended._get_market_snapshot_quotes() == []
+    assert len(calls) == 1
+
+    with stocks_extended._top_movers_cache_lock:
+        stocks_extended.top_movers_cache.update(data=None, timestamp=0.0)
+
+
+def test_market_batch_timeout_does_not_enqueue_duplicate_provider_work(monkeypatch):
+    class PendingFuture:
+        def done(self):
+            return False
+
+    class UnexpectedExecutor:
+        def submit(self, request_fn):
+            raise AssertionError("must not enqueue another provider request")
+
+    monkeypatch.setattr(stocks_extended, "_BATCH_FETCH_FUTURE", PendingFuture())
+    monkeypatch.setattr(stocks_extended, "_BATCH_FETCH_EXECUTOR", UnexpectedExecutor())
+
+    try:
+        stocks_extended._run_batch_with_timeout(lambda: [], timeout_seconds=0.01)
+    except TimeoutError:
+        pass
+    else:
+        raise AssertionError("an in-flight provider request should be treated as timed out")

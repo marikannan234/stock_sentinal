@@ -9,6 +9,7 @@ from typing import List, Optional
 class Settings(BaseSettings):
     # General
     APP_NAME: str = "StockSentinel API"
+    FRONTEND_URL: str | None = None  # Optional absolute frontend URL used in notification links
     ENVIRONMENT: str = "local"  # local | staging | production
     DEBUG: bool = True
 
@@ -65,11 +66,9 @@ class Settings(BaseSettings):
     ENABLE_EMAIL_NOTIFICATIONS: bool = True
     EMAIL_NOTIFICATION_RETRY_COUNT: int = 3
 
-    # WhatsApp Configuration (Twilio)
-    ENABLE_WHATSAPP_NOTIFICATIONS: bool = False  # Set to True to enable WhatsApp alerts
-    TWILIO_ACCOUNT_SID: str | None = None
-    TWILIO_AUTH_TOKEN: str | None = None
-    TWILIO_WHATSAPP_NUMBER: str | None = None  # e.g., "+14155238886"
+    # Telegram Bot API notifications. Disabled until configured by the operator.
+    ENABLE_TELEGRAM_NOTIFICATIONS: bool = False
+    TELEGRAM_BOT_TOKEN: str | None = None
 
     # Deprecated, no effect: alerts are one-shot (they deactivate when they
     # fire and are re-armed by re-enabling them), so there is no cooldown.

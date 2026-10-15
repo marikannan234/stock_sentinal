@@ -86,3 +86,38 @@ def test_no_hardcoded_reset_code_in_auth_routes():
 
     assert "123456" not in source
     assert "_otp_store" not in source
+
+ 
+def test_user_can_save_and_clear_telegram_chat_id(client, auth_headers):
+    saved = client.patch(
+        "/api/auth/me",
+        headers=auth_headers,
+        json={"telegram_chat_id": "123456789"},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["telegram_chat_id"] == "123456789"
+
+    cleared = client.patch(
+        "/api/auth/me",
+        headers=auth_headers,
+        json={"telegram_chat_id": ""},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["telegram_chat_id"] is None
+
+def test_user_profile_can_save_and_clear_telegram_chat_id(client, auth_headers):
+    saved = client.put(
+        "/api/user/profile",
+        headers=auth_headers,
+        json={"telegram_chat_id": "123456789"},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["telegram_chat_id"] == "123456789"
+
+    cleared = client.put(
+        "/api/user/profile",
+        headers=auth_headers,
+        json={"telegram_chat_id": ""},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["telegram_chat_id"] is None

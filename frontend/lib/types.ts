@@ -2,6 +2,7 @@ export type UserProfile = {
   id: number;
   email: string;
   full_name?: string | null;
+  telegram_chat_id?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

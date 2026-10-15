@@ -47,9 +47,10 @@ TOP_STOCKS = [
 # AGGRESSIVE CACHE CONFIGURATION
 # ============================================================================
 MARKET_REQUEST_TIMEOUT_SECONDS = 2  # REDUCED from 3 to 2 seconds
-TOP_MOVERS_CACHE_TTL_SECONDS = 10   # Market snapshot: 10 seconds
-STOCK_PRICE_CACHE_TTL_SECONDS = 5   # Individual prices: 5 seconds MAX
-MARKET_SUMMARY_CACHE_TTL_SECONDS = 10  # Market summary: 10 seconds
+TOP_MOVERS_CACHE_TTL_SECONDS = 60   # Reuse market snapshots to avoid hammering rate-limited providers
+STOCK_PRICE_CACHE_TTL_SECONDS = 30   # Per-symbol quote cache
+MARKET_SUMMARY_CACHE_TTL_SECONDS = 60  # Reuse summaries alongside the market snapshot
+MARKET_FAILURE_CACHE_TTL_SECONDS = 5  # Briefly suppress repeated provider calls after an empty fetch
 
 
 # ============================================================================
@@ -160,6 +161,23 @@ def _run_with_timeout(request_fn, timeout_seconds: float):
 # DataFrame and never reads that shared state, so they need no lock.
 _YF_DOWNLOAD_LOCK = threading.Lock()
 
+# Keep only one market-snapshot provider request in flight. A Python thread
+# cannot be force-killed after a timeout; creating a fresh executor per request
+# can otherwise accumulate blocked workers during a provider outage.
+_BATCH_FETCH_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+_BATCH_FETCH_STATE_LOCK = threading.Lock()
+_BATCH_FETCH_FUTURE = None
+
+
+def _run_batch_with_timeout(request_fn, timeout_seconds: float):
+    global _BATCH_FETCH_FUTURE
+    with _BATCH_FETCH_STATE_LOCK:
+        if _BATCH_FETCH_FUTURE is not None and not _BATCH_FETCH_FUTURE.done():
+            raise FutureTimeoutError("previous market snapshot request is still running")
+        future = _BATCH_FETCH_EXECUTOR.submit(request_fn)
+        _BATCH_FETCH_FUTURE = future
+    return future.result(timeout=timeout_seconds)
+
 
 def _yf_download(**kwargs):
     with _YF_DOWNLOAD_LOCK:
@@ -189,7 +207,7 @@ def _fetch_market_quotes_batch(symbols: List[str]) -> List[StockQuote]:
             )
         
         try:
-            data = _run_with_timeout(_fetch, timeout_seconds=2)
+            data = _run_batch_with_timeout(_fetch, timeout_seconds=2)
         except FutureTimeoutError:
             logger.warning(f"⚠️ Batch fetch TIMEOUT for {len(symbols)} stocks (>2s) - no live snapshot")
             return []
@@ -276,11 +294,18 @@ def _get_market_snapshot_quotes() -> List[StockQuote]:
 def _get_fresh_snapshot_from_cache() -> Optional[List[StockQuote]]:
     current_time = time.time()
     with _top_movers_cache_lock:
-        if (top_movers_cache["data"] is not None and
-            current_time - top_movers_cache["timestamp"] < TOP_MOVERS_CACHE_TTL_SECONDS):
-            age = current_time - top_movers_cache["timestamp"]
-            logger.info(f"✓ Market cache HIT (age: {age:.1f}s) - returning {len(top_movers_cache['data'])} quotes instantly")
-            return top_movers_cache["data"]
+        data = top_movers_cache["data"]
+        age = current_time - top_movers_cache["timestamp"]
+        # Empty results get a short negative-cache window to prevent a provider
+        # outage/rate limit from causing a new 20-symbol request on every poll.
+        ttl = MARKET_FAILURE_CACHE_TTL_SECONDS if data == [] else TOP_MOVERS_CACHE_TTL_SECONDS
+        if data is not None and age < ttl:
+            logger.info(
+                "Market cache HIT (age: %.1fs, quotes: %d)",
+                age,
+                len(data),
+            )
+            return data
     return None
 
 
@@ -302,12 +327,17 @@ def _refresh_market_snapshot() -> List[StockQuote]:
             logger.info(f"✓ Market data fetched and cached ({fetch_time:.0f}ms) - {len(quotes)} quotes")
             return quotes
 
-        if top_movers_cache["data"] is not None:
+        previous_snapshot = top_movers_cache["data"]
+        if previous_snapshot:
             age = current_time - top_movers_cache["timestamp"]
             logger.warning(f"⚠️ Live market data unavailable; returning last snapshot (age: {age:.1f}s)")
-            return top_movers_cache["data"]
+            return previous_snapshot
 
-    logger.warning("⚠️ Live market data unavailable and no earlier snapshot; returning no quotes")
+        # Refresh the negative-cache timestamp after every failed fetch. Without
+        # this, requests storm the provider as soon as the first 5s TTL expires.
+        top_movers_cache["data"] = []
+        top_movers_cache["timestamp"] = time.time()
+    logger.warning("Live market data unavailable; temporarily caching empty snapshot")
     return []
 
 

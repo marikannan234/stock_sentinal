@@ -37,10 +37,14 @@ def update_user_profile(
 ) -> User:
     """Update user profile."""
     
-    update_data = profile_update.dict(exclude_unset=True)
-    
+    update_data = profile_update.model_dump(exclude_unset=True)
+
     for field, value in update_data.items():
-        if value is not None:
+        if field == "telegram_chat_id":
+            # Empty string explicitly clears the recipient; never store whitespace.
+            normalized_chat_id = value.strip() if isinstance(value, str) else ""
+            current_user.telegram_chat_id = normalized_chat_id or None
+        elif value is not None:
             setattr(current_user, field, value)
     
     db.add(current_user)

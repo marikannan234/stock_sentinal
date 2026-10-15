@@ -125,7 +125,7 @@ class Alert(Base):
     # ============================================================================
     # PRIMARY KEY
     # ============================================================================
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
     
     # ============================================================================
     # FOREIGN KEYS
@@ -307,7 +307,7 @@ class AlertHistory(Base):
     # ============================================================================
     # PRIMARY KEY
     # ============================================================================
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
     
     # ============================================================================
     # FOREIGN KEYS

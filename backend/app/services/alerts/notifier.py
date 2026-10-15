@@ -1,10 +1,10 @@
 """
-Notifications for a fired alert: email (SMTP), WhatsApp (Twilio) and,
-optionally, a WebSocket push.
+Notifications for a fired alert: email (SMTP), Telegram, and optionally
+a WebSocket push.
 
 Each channel is independent and failures are logged and swallowed, so a
-broken SMTP server or Twilio outage never stops the alert job. Logs never
-contain email addresses, phone numbers or credentials.
+provider outage never stops the alert job. Logs never contain recipient
+identifiers or credentials.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from app.config import settings
 from app.core.event_loop import run_coroutine_from_thread
 from app.models.alert import Alert
 from app.services.alerts.base import CheckResult
+from app.services.telegram_service import send_telegram_notification
 from app.services.email_smtp import send_alert_notification
-from app.services.whatsapp_service import send_whatsapp_notification
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ WEBSOCKET_TIMEOUT_SECONDS = 5.0
 @dataclass
 class NotificationOutcome:
     email_sent: bool = False
-    whatsapp_sent: bool = False
+    telegram_sent: bool = False
     websocket_sent: bool = False
 
 
@@ -64,14 +64,14 @@ class AlertNotifier:
             except Exception as exc:
                 logger.warning("Alert email failed", extra={**context, "error_type": type(exc).__name__})
 
-        if settings.ENABLE_WHATSAPP_NOTIFICATIONS and user is not None and getattr(user, "whatsapp_phone", None):
+        if settings.ENABLE_TELEGRAM_NOTIFICATIONS and user is not None and getattr(user, "telegram_chat_id", None):
             try:
-                outcome.whatsapp_sent = bool(send_whatsapp_notification(
-                    phone_number=user.whatsapp_phone,
-                    message=whatsapp_message(alert, result, price, triggered_at),
+                outcome.telegram_sent = bool(send_telegram_notification(
+                    chat_id=user.telegram_chat_id,
+                    message=telegram_message(alert, result, price, triggered_at),
                 ))
             except Exception as exc:
-                logger.warning("Alert WhatsApp message failed", extra={**context, "error_type": type(exc).__name__})
+                logger.warning("Alert Telegram message failed", extra={**context, "error_type": type(exc).__name__})
 
         if BROADCAST_ALERTS_OVER_WEBSOCKET:
             outcome.websocket_sent = self._broadcast(alert, result, price, triggered_at)
@@ -102,13 +102,13 @@ class AlertNotifier:
             return False
 
 
-def whatsapp_message(alert: Alert, result: CheckResult, price: float, triggered_at: datetime) -> str:
+def telegram_message(alert: Alert, result: CheckResult, price: float, triggered_at: datetime) -> str:
+    rule = result.description or f"{alert.stock_symbol} {alert.alert_type.value} alert"
     return (
-        "🚨 *STOCK ALERT*\n\n"
-        f"📈 Symbol: *{alert.stock_symbol}*\n"
-        f"📊 Rule: {result.description}\n"
-        f"💹 Price: {price:.2f}\n"
-        f"🕒 Time: {triggered_at.strftime('%d-%m-%Y %H:%M')} UTC\n\n"
-        "This alert is now paused. Re-enable it in StockSentinel to keep watching.\n\n"
-        "_- StockSentinel_"
+        "🚨 STOCKSENTINEL ALERT\n\n"
+        f"Symbol: {alert.stock_symbol}\n"
+        f"Rule: {rule}\n"
+        f"Current price: {price:.2f}\n"
+        f"Triggered at: {triggered_at.strftime('%d-%m-%Y %H:%M')} UTC\n\n"
+        "This one-shot alert is now paused. Re-enable it in StockSentinel to keep watching."
     )

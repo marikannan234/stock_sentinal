@@ -19,7 +19,7 @@ class Portfolio(Base):
     __tablename__ = "portfolios"
     __table_args__ = (UniqueConstraint("user_id", "ticker", name="uq_portfolio_user_ticker"),)
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     ticker: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     # Derived from the user's open trades (see app.services.trading_service).

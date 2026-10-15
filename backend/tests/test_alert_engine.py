@@ -519,26 +519,20 @@ def test_notification_failure_keeps_trigger_and_continues(session_factory, db_se
     assert reload(db_session, first).is_active is False
 
 
-def test_whatsapp_and_email_for_indicator_alert(session_factory, db_session, owner, fake_market, emails, monkeypatch):
-    messages = []
-    owner.whatsapp_phone = "+15550001111"
-    db_session.commit()
-    monkeypatch.setattr(settings, "ENABLE_WHATSAPP_NOTIFICATIONS", True)
-    monkeypatch.setattr(notifier, "send_whatsapp_notification", lambda **kw: messages.append(kw) or True)
+def test_email_for_indicator_alert(session_factory, db_session, owner, fake_market, emails):
     make_alert(db_session, owner, alert_type=AlertType.SMA_ABOVE, sma_period=20)
     fake_market.set("AAPL", RISING)
 
     run(session_factory, fake_market)
 
     assert emails[0]["target_value"] is None and "SMA(20)" in emails[0]["description"]
-    assert "SMA(20)" in messages[0]["message"] and "₹" not in messages[0]["message"]
 
 
-def test_logs_do_not_contain_email_or_phone(session_factory, db_session, owner, fake_market, emails, monkeypatch):
-    owner.whatsapp_phone = "+15550001111"
+def test_logs_do_not_contain_email_or_telegram_chat_id(session_factory, db_session, owner, fake_market, emails, monkeypatch):
+    owner.telegram_chat_id = "987654321"
     db_session.commit()
-    monkeypatch.setattr(settings, "ENABLE_WHATSAPP_NOTIFICATIONS", True)
-    monkeypatch.setattr(notifier, "send_whatsapp_notification", lambda **kw: True)
+    monkeypatch.setattr(settings, "ENABLE_TELEGRAM_NOTIFICATIONS", True)
+    monkeypatch.setattr(notifier, "send_telegram_notification", lambda **kw: True)
     make_alert(db_session, owner, condition=AlertCondition.GREATER_THAN, target_value=1)
     fake_market.set("AAPL", [100.0])
 
@@ -557,7 +551,7 @@ def test_logs_do_not_contain_email_or_phone(session_factory, db_session, owner, 
 
     text = "\n".join(records)
     assert "Alert triggered" in text
-    assert USER_EMAIL not in text and "5550001111" not in text
+    assert USER_EMAIL not in text and "987654321" not in text
 
 
 def test_email_template_handles_indicator_alert_without_target(monkeypatch):
@@ -575,10 +569,7 @@ def test_email_template_handles_indicator_alert_without_target(monkeypatch):
 
 def test_mask_helpers():
     from app.services.email_smtp import mask_email
-    from app.services.whatsapp_service import mask_phone
-
     assert mask_email("jane.doe@example.com") == "ja***@example.com"
-    assert mask_phone("+91 98765 43210") == "***3210"
 
 
 # ---------------------------------------------------------------------------
@@ -725,3 +716,29 @@ def test_scheduler_survives_a_failing_run(monkeypatch):
         scheduler.stop_scheduler(wait=True)
 
     assert len(calls) >= 2
+
+
+def test_telegram_notification_is_sent_for_triggered_user_alert(
+    session_factory, db_session, owner, fake_market, monkeypatch
+):
+    sent = []
+    owner.telegram_chat_id = "123456"
+    db_session.commit()
+    monkeypatch.setattr(settings, "ENABLE_TELEGRAM_NOTIFICATIONS", True)
+    monkeypatch.setattr(
+        notifier,
+        "send_telegram_notification",
+        lambda **kwargs: sent.append(kwargs) or True,
+    )
+    alert = make_alert(
+        db_session, owner, condition=AlertCondition.GREATER_THAN, target_value=1
+    )
+    fake_market.set("AAPL", [100.0])
+
+    summary = run(session_factory, fake_market)
+
+    assert summary.triggered_ids == [alert.id]
+    assert len(sent) == 1
+    assert sent[0]["chat_id"] == "123456"
+    assert "STOCKSENTINEL ALERT" in sent[0]["message"]
+    assert "AAPL" in sent[0]["message"]

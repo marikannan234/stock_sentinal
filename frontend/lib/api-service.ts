@@ -227,8 +227,10 @@ export const profileService = {
     const { data } = await api.get<UserProfile>('/user/profile');
     return data;
   },
-  async updateProfile(fullName: string) {
-    const { data } = await api.put<UserProfile>('/user/profile', { full_name: fullName || null });
+  async updateProfile(fullName: string, telegramChatId?: string) {
+    const payload: { full_name: string | null; telegram_chat_id?: string } = { full_name: fullName || null };
+    if (telegramChatId !== undefined) payload.telegram_chat_id = telegramChatId.trim();
+    const { data } = await api.put<UserProfile>('/user/profile', payload);
     return data;
   },
   async getSettings() {

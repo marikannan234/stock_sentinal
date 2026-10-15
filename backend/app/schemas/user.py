@@ -12,6 +12,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(min_length=8, max_length=128)
     whatsapp_phone: Optional[str] = Field(default=None, max_length=20, description="WhatsApp phone with country code (e.g., +919876543210)")
+    telegram_chat_id: Optional[str] = Field(default=None, max_length=64, description="Telegram chat ID for notifications")
 
 
 class UserLogin(BaseModel):
@@ -29,6 +30,7 @@ class UserRead(UserBase):
     id: int
     is_active: bool
     whatsapp_phone: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -38,6 +40,7 @@ class UserRead(UserBase):
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=255)
+    telegram_chat_id: Optional[str] = Field(default=None, max_length=64)
 
 
 class PasswordChange(BaseModel):

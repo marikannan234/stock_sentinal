@@ -352,23 +352,23 @@ def add_or_update_position(
     if not ticker_upper:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ticker cannot be empty")
 
-    # ── Symbol validation against Finnhub ──────────────────────────────
+    # Validate with Finnhub when it has results. Empty results can mean a missing
+    # API key, rate limit, or provider outage. The trading engine below still
+    # requires a real server-side market price before it writes any trade.
     try:
         search_results = _finnhub_symbol_search(ticker_upper)
     except HTTPException:
-        # If the search service is unavailable, let it through (fail-open)
-        search_results = [{"symbol": ticker_upper}]
-
-    matched = any(
-        str(r.get("symbol", "") or r.get("displaySymbol", "")).upper() == ticker_upper
-        for r in search_results
-    )
-    if not matched:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"'{ticker_upper}' is not a recognised stock or crypto symbol. Please search and select a valid symbol.",
+        search_results = []
+    if search_results:
+        matched = any(
+            str(r.get("symbol", "") or r.get("displaySymbol", "")).upper() == ticker_upper
+            for r in search_results
         )
-    # ──────────────────────────────────────────────────────────────────
+        if not matched:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ticker is not recognised: {ticker_upper}. Please search and select a valid symbol.",
+            )
 
     _execute(db, current_user, ticker_upper, TradeType.BUY, body.quantity)
     return _holdings_list(db, current_user.id)

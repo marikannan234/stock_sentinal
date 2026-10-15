@@ -69,15 +69,13 @@ def send_alert_email_smtp(
         msg.attach(MIMEText(html_body, "html"))
         
         # Send via SMTP
-        with smtplib.SMTP(settings.MAIL_SERVER, settings.MAIL_PORT, timeout=10) as server:
-            # Enable TLS if configured
-            if settings.MAIL_STARTTLS:
+        smtp_client = smtplib.SMTP_SSL if settings.MAIL_SSL_TLS else smtplib.SMTP
+        with smtp_client(settings.MAIL_SERVER, settings.MAIL_PORT, timeout=10) as server:
+            # STARTTLS and implicit SSL are mutually exclusive SMTP modes.
+            if settings.MAIL_STARTTLS and not settings.MAIL_SSL_TLS:
                 server.starttls()
-            
-            # Login
+
             server.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
-            
-            # Send message
             server.send_message(msg)
         
         logger.info(
@@ -113,6 +111,21 @@ def send_alert_email_smtp(
             exc_info=True,
         )
         return False
+
+
+def _dashboard_url() -> str:
+    """Resolve a real frontend URL for email links, preferring explicit config."""
+    configured = getattr(settings, "FRONTEND_URL", None)
+    if configured:
+        return f"{configured.rstrip('/')}/dashboard"
+
+    # Reuse a configured non-local CORS origin when FRONTEND_URL is not set.
+    for origin in settings.BACKEND_CORS_ORIGINS:
+        url = str(origin).rstrip("/")
+        if "localhost" not in url and "127.0.0.1" not in url:
+            return f"{url}/dashboard"
+
+    return "http://localhost:3000/dashboard"
 
 
 def send_alert_notification(
@@ -160,8 +173,11 @@ def send_alert_notification(
         rule = description or f"{symbol} {alert_type} alert"
     rule_html = html.escape(rule)
 
-    # Build subject
+    # Build subject and safely escaped values for HTML output.
     subject = f"🔔 Stock Alert Triggered: {symbol}"
+    symbol_html = html.escape(symbol)
+    triggered_at_html = html.escape(triggered_at)
+    dashboard_url = html.escape(_dashboard_url(), quote=True)
     
     # Build HTML email body
     html_body = f"""
@@ -260,12 +276,12 @@ def send_alert_notification(
         
         <div class="content">
             <p>Hello,</p>
-            <p>Your price alert for <strong>{symbol}</strong> has been triggered!</p>
+            <p>Your price alert for <strong>{symbol_html}</strong> has been triggered!</p>
             
             <div class="alert-box">
                 <div class="detail">
                     <span class="label">Stock Symbol:</span>
-                    <span class="value"><strong>{symbol}</strong></span>
+                    <span class="value"><strong>{symbol_html}</strong></span>
                 </div>
                 <div class="detail">
                     <span class="label">Current Price:</span>
@@ -277,7 +293,7 @@ def send_alert_notification(
                 </div>
                 <div class="detail">
                     <span class="label">Triggered At:</span>
-                    <span class="value">{triggered_at}</span>
+                    <span class="value">{triggered_at_html}</span>
                 </div>
             </div>
             
@@ -286,7 +302,7 @@ def send_alert_notification(
             <p>This alert has been deactivated. You can view your portfolio and create new alerts anytime.</p>
             
             <div style="text-align: center;">
-                <a href="http://localhost:3000/dashboard" class="button">View Dashboard</a>
+                <a href="{dashboard_url}" class="button">View Dashboard</a>
             </div>
         </div>
         
@@ -309,7 +325,7 @@ Alert Condition: {rule}
 Triggered At: {triggered_at}
 
 Your price alert has been triggered.
-View your dashboard: http://localhost:3000/dashboard
+View your dashboard: {_dashboard_url()}
 
 Stock Sentinel - Real-Time Stock Market Monitoring
 """
