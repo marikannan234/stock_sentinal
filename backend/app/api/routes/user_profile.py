@@ -42,7 +42,8 @@ def update_user_profile(
     for field, value in update_data.items():
         if field == "telegram_chat_id":
             # Empty string explicitly clears the recipient; never store whitespace.
-            current_user.telegram_chat_id = value.strip() or None if value else None
+            normalized_chat_id = value.strip() if isinstance(value, str) else ""
+            current_user.telegram_chat_id = normalized_chat_id or None
         elif value is not None:
             setattr(current_user, field, value)
     
